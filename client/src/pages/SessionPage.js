@@ -23,7 +23,7 @@ function SessionPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { joinSession, leaveSession, on, off } = useSocket();
+  const { joinSession, leaveSession, on, off, requestPresenceSync } = useSocket();
   
   const [session, setSession] = useState(null);
   const [votes, setVotes] = useState([]);
@@ -43,6 +43,12 @@ function SessionPage() {
     // Join the session room
     joinSession(id);
     
+    // Request presence sync after a short delay to ensure connection is established
+    const syncTimer = setTimeout(() => {
+      console.log('🔄 Requesting initial presence sync...');
+      requestPresenceSync(id);
+    }, 500);  // Reduced from 1000ms to 500ms for faster response
+    
     // Listen for real-time updates
     on('voteSubmitted', handleVoteSubmitted);
     on('votesRevealed', handleVotesRevealed);
@@ -52,9 +58,12 @@ function SessionPage() {
     on('userConnected', handleUserConnected);
     on('userDisconnected', handleUserDisconnected);
     on('sessionUsers', handleSessionUsers);
+    on('participantsUpdated', handleParticipantsUpdated);
+    on('joinedSession', handleJoinedSession);
     on('ticketUpdated', handleTicketUpdated);
     
     return () => {
+      clearTimeout(syncTimer);
       leaveSession(id);
       off('voteSubmitted', handleVoteSubmitted);
       off('votesRevealed', handleVotesRevealed);
@@ -64,9 +73,11 @@ function SessionPage() {
       off('userConnected', handleUserConnected);
       off('userDisconnected', handleUserDisconnected);
       off('sessionUsers', handleSessionUsers);
+      off('participantsUpdated', handleParticipantsUpdated);
+      off('joinedSession', handleJoinedSession);
       off('ticketUpdated', handleTicketUpdated);
     };
-  }, [id, joinSession, leaveSession, on, off]); // Keep socket dependencies
+  }, [id, joinSession, leaveSession, on, off, requestPresenceSync]); // Keep socket dependencies
 
   const loadSession = async () => {
     try {
@@ -86,6 +97,11 @@ function SessionPage() {
       );
       if (userVote && userVote.value) {
         setSelectedCard(userVote.value);
+      }
+
+      // Initialize current user as online since they're loading the session
+      if (user?.id) {
+        setOnlineUsers(prev => new Set([...prev, user.id]));
       }
     } catch (error) {
       toast.error('Erreur lors du chargement de la session');
@@ -149,15 +165,34 @@ function SessionPage() {
 
   const handleUserConnected = useCallback((data) => {
     if (data.sessionId === id) {
-      setOnlineUsers(prev => new Set([...prev, data.userId]));
+      setOnlineUsers(prev => {
+        const newSet = new Set([...prev, data.userId]);
+        console.log('User connected:', data.userId, 'Online users:', Array.from(newSet));
+        return newSet;
+      });
     }
   }, [id]);
 
   const handleSessionUsers = useCallback((data) => {
     if (data.sessionId === id) {
-      setOnlineUsers(new Set(data.onlineUsers));
+      const newOnlineUsers = new Set(data.onlineUsers);
+      // Always ensure current user is marked as online if they're in the session
+      if (user?.id) {
+        newOnlineUsers.add(user.id);
+      }
+      setOnlineUsers(newOnlineUsers);
+      console.log('🔄 Updated online users from sessionUsers:', Array.from(newOnlineUsers));
+      
+      // Also update session.connectedUsers to ensure getActiveParticipants has the right data
+      if (data.connectedUsers && Array.isArray(data.connectedUsers)) {
+        setSession(prev => prev ? {
+          ...prev,
+          connectedUsers: data.connectedUsers
+        } : null);
+        console.log('🔄 Updated session.connectedUsers from sessionUsers:', data.connectedUsers);
+      }
     }
-  }, [id]);
+  }, [id, user?.id]);
 
   const handleUserDisconnected = useCallback((data) => {
     if (data.sessionId === id) {
@@ -175,6 +210,122 @@ function SessionPage() {
       toast.success('Ticket mis à jour');
     }
   }, [id]);
+
+  const handleParticipantsUpdated = useCallback((data) => {
+    if (data.sessionId === id) {
+      // Replace entire online users list with the authoritative server list
+      const newOnlineUsers = new Set(data.onlineUsers);
+      
+      // Always ensure current user is included if they're in the session
+      if (user?.id) {
+        newOnlineUsers.add(user.id);
+      }
+      
+      setOnlineUsers(newOnlineUsers);
+      
+      console.log('🔄 Participants updated from server:', {
+        sessionId: data.sessionId,
+        onlineUsers: data.onlineUsers,
+        participantCount: data.participantCount,
+        connectedUsers: data.connectedUsers,
+        newOnlineUsersSet: Array.from(newOnlineUsers)
+      });
+      
+      // Update session data if we have connected users info
+      if (data.connectedUsers && data.connectedUsers.length > 0) {
+        setSession(prev => prev ? {
+          ...prev,
+          connectedUsers: data.connectedUsers
+        } : null);
+      }
+    }
+  }, [id, user?.id]);
+
+  const handleJoinedSession = useCallback((data) => {
+    if (data.sessionId === id) {
+      console.log('✅ Successfully joined session:', {
+        sessionId: data.sessionId,
+        userCount: data.userCount,
+        users: data.users
+      });
+      
+      // Ensure current user is marked as online
+      if (user?.id) {
+        setOnlineUsers(prev => new Set([...prev, user.id]));
+      }
+      
+      // Force a presence sync to ensure we have the latest state
+      setTimeout(() => {
+        requestPresenceSync(id);
+      }, 500);
+    }
+  }, [id, user?.id, requestPresenceSync]);
+
+  // Create dynamic participants list combining session data with real-time online status
+  const getActiveParticipants = useCallback(() => {
+    if (!session?.participants) return [];
+    
+    // Get base participants from session
+    const baseParticipants = session.participants || [];
+    
+    // Get additional online users who might not be in session.participants yet
+    const connectedUsersInfo = session.connectedUsers || [];
+    
+    // Create a map of existing participants
+    const participantsMap = new Map();
+    
+    // Add session participants first
+    baseParticipants.forEach(participant => {
+      participantsMap.set(participant._id, {
+        ...participant,
+        isOnline: onlineUsers.has(participant._id),
+        source: 'session'
+      });
+    });
+    
+    // Add/update with real-time connected users
+    connectedUsersInfo.forEach(connectedUser => {
+      if (participantsMap.has(connectedUser.userId)) {
+        // Update existing participant - mark as online based on being in connectedUsersInfo
+        const existing = participantsMap.get(connectedUser.userId);
+        participantsMap.set(connectedUser.userId, {
+          ...existing,
+          isOnline: true, // Force online if in connectedUsersInfo
+          source: 'both'
+        });
+      } else {
+        // Add new connected user (might not be in session.participants yet)
+        participantsMap.set(connectedUser.userId, {
+          _id: connectedUser.userId,
+          username: connectedUser.username,
+          isOnline: true, // Force online if in connectedUsersInfo
+          source: 'realtime'
+        });
+      }
+    });
+    
+    // Ensure current user is included if online
+    if (user?.id && onlineUsers.has(user.id) && !participantsMap.has(user.id)) {
+      participantsMap.set(user.id, {
+        _id: user.id,
+        username: user.username,
+        isOnline: true,
+        source: 'current'
+      });
+    }
+    
+    const result = Array.from(participantsMap.values());
+    console.log('🔄 Active participants calculated:', {
+      sessionParticipants: baseParticipants.length,
+      connectedUsers: connectedUsersInfo.length,
+      onlineUsers: Array.from(onlineUsers),
+      finalList: result.map(p => ({ username: p.username, isOnline: p.isOnline, source: p.source }))
+    });
+    
+    return result;
+  }, [session?.participants, session?.connectedUsers, onlineUsers, user]);
+
+  const activeParticipants = getActiveParticipants();
 
   const submitVote = async (cardValue) => {
     if (votesRevealed) {
@@ -227,8 +378,8 @@ function SessionPage() {
 
   const isAdmin = session?.userRole === 'admin';
   const hasVoted = selectedCard !== null;
-  const allParticipantsVoted = session?.participants?.length > 0 && 
-    votes.length === session.participants.length;
+  const allParticipantsVoted = activeParticipants.length > 0 && 
+    votes.length === activeParticipants.length;
 
   if (loading) {
     return (
@@ -457,16 +608,16 @@ function SessionPage() {
               </div>
               <div className="card-body">
                 <div className="space-y-3">
-                  {session.participants?.map((participant) => {
+                  {activeParticipants.map((participant) => {
                     const hasUserVoted = votes.some(vote => 
                       vote.userId === participant._id || vote.userId?._id === participant._id
                     );
                     const userVote = votesRevealed ? votes.find(vote => 
                       vote.userId === participant._id || vote.userId?._id === participant._id
                     ) : null;
-                    const isOnline = onlineUsers.has(participant._id);
+                    const isOnline = participant.isOnline || onlineUsers.has(participant._id);
                     const isCurrentUser = participant._id === user?.id;
-                    const isSessionAdmin = participant._id === session.createdBy._id;
+                    const isSessionAdmin = session?.createdBy && (participant._id === session.createdBy._id || participant._id === session.createdBy);
 
                     return (
                       <div key={participant._id} className="flex items-center justify-between">
@@ -482,6 +633,11 @@ function SessionPage() {
                               </span>
                               {isSessionAdmin && (
                                 <Crown className="h-4 w-4 text-yellow-500" />
+                              )}
+                              {participant.source && process.env.NODE_ENV === 'development' && (
+                                <span className="text-xs bg-gray-100 px-1 rounded">
+                                  {participant.source}
+                                </span>
                               )}
                             </div>
                             <div className="flex items-center space-x-2">
@@ -521,7 +677,7 @@ function SessionPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Votes reçus</span>
                     <span className="font-medium">
-                      {votes.length} / {session.participants?.length || 0}
+                      {votes.length} / {activeParticipants.length}
                     </span>
                   </div>
                   
@@ -529,8 +685,8 @@ function SessionPage() {
                     <div 
                       className="bg-primary-600 h-2 rounded-full transition-all duration-300"
                       style={{ 
-                        width: `${session.participants?.length > 0 ? 
-                          (votes.length / session.participants.length) * 100 : 0}%` 
+                        width: `${activeParticipants.length > 0 ? 
+                          (votes.length / activeParticipants.length) * 100 : 0}%` 
                       }}
                     />
                   </div>

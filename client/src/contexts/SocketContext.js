@@ -119,6 +119,12 @@ export function SocketProvider({ children }) {
     }
   }, []);
 
+  const requestPresenceSync = useCallback((sessionId) => {
+    if (socketRef.current) {
+      socketRef.current.emit('requestPresenceSync', sessionId);
+    }
+  }, []);
+
   const value = {
     socket,
     connected,
@@ -128,7 +134,8 @@ export function SocketProvider({ children }) {
     emitVoteUpdate,
     emitAdminAction,
     on,
-    off
+    off,
+    requestPresenceSync
   };
 
   return (

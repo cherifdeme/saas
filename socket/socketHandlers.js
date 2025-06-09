@@ -79,6 +79,52 @@ const getAllSessionCounts = () => {
   return counts;
 };
 
+// Get actually connected users from Socket.IO rooms (more reliable than sessionConnections)
+const getConnectedUsersInSession = async (io, sessionId) => {
+  try {
+    const room = io.sockets.adapter.rooms.get(`session-${sessionId}`);
+    if (!room) return [];
+    
+    const connectedUsers = [];
+    for (const socketId of room) {
+      const socket = io.sockets.sockets.get(socketId);
+      if (socket && socket.userId && socket.username) {
+        // Avoid duplicates (same user might have multiple socket connections)
+        const existingUser = connectedUsers.find(user => user.userId === socket.userId);
+        if (!existingUser) {
+          connectedUsers.push({
+            userId: socket.userId,
+            username: socket.username,
+            socketId: socketId
+          });
+        }
+      }
+    }
+    
+    console.log(`Utilisateurs trouvés dans la room session-${sessionId}:`, connectedUsers.map(u => u.username));
+    return connectedUsers;
+  } catch (error) {
+    console.error('Erreur lors de la récupération des utilisateurs connectés:', error);
+    return [];
+  }
+};
+
+// Sync sessionConnections with actual Socket.IO room state
+const syncSessionConnections = async (io, sessionId) => {
+  const actualUsers = await getConnectedUsersInSession(io, sessionId);
+  const actualUserIds = actualUsers.map(u => u.userId);
+  
+  // Update sessionConnections to match reality
+  if (actualUserIds.length > 0) {
+    sessionConnections.set(sessionId, new Set(actualUserIds));
+  } else {
+    sessionConnections.delete(sessionId);
+  }
+  
+  console.log(`Session ${sessionId} synchronized: ${actualUserIds.length} users`);
+  return actualUserIds;
+};
+
 const handleConnection = (io) => {
   io.use(socketAuth);
 
@@ -106,35 +152,71 @@ const handleConnection = (io) => {
           return;
         }
 
-        socket.join(`session-${sessionId}`);
+        // Leave any previous session rooms to avoid conflicts
+        if (socket.currentSessionId && socket.currentSessionId !== sessionId) {
+          socket.leave(`session-${socket.currentSessionId}`);
+          removeUserFromSession(socket.currentSessionId, socket.userId);
+        }
+
+        // Join the session room and wait for completion
+        await new Promise((resolve) => {
+          socket.join(`session-${sessionId}`, () => {
+            resolve();
+          });
+        });
+        
         socket.currentSessionId = sessionId;
 
-        // Add user to session tracking
+        // Add user to session tracking AFTER joining room
         addUserToSession(sessionId, socket.userId);
 
-        // Notify ALL participants (including the user who joined) about the connection
-        io.to(`session-${sessionId}`).emit('userConnected', {
+        // Small delay to ensure socket is fully in the room
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Get comprehensive user info including usernames
+        const connectedUsersInfo = await getConnectedUsersInSession(io, sessionId);
+        const userIds = connectedUsersInfo.map(user => user.userId);
+        
+        // Update sessionConnections with actual state
+        if (userIds.length > 0) {
+          sessionConnections.set(sessionId, new Set(userIds));
+        }
+
+        console.log(`${socket.username} a rejoint la session ${sessionId}. Utilisateurs connectés:`, connectedUsersInfo);
+
+        // Step 1: Send current state to the joining user first
+        socket.emit('sessionUsers', {
+          sessionId,
+          onlineUsers: userIds
+        });
+
+        // Step 2: Broadcast to ALL users in session (including the joiner) the updated participant list
+        io.to(`session-${sessionId}`).emit('participantsUpdated', {
+          sessionId,
+          onlineUsers: userIds,
+          participantCount: userIds.length,
+          connectedUsers: connectedUsersInfo  // Include full user info
+        });
+
+        // Step 3: Notify other participants about the specific new connection
+        socket.to(`session-${sessionId}`).emit('userConnected', {
           userId: socket.userId,
           username: socket.username,
           sessionId
         });
 
-        // Send current online users to the user who just joined
-        const currentUsers = sessionConnections.get(sessionId) || new Set();
-        socket.emit('sessionUsers', {
-          sessionId,
-          onlineUsers: Array.from(currentUsers)
-        });
-
-        // Broadcast updated participant count to all users
-        const userCount = getSessionUserCount(sessionId);
+        // Step 4: Global participant count update
         io.emit('sessionParticipantUpdate', {
           sessionId,
-          participantCount: userCount
+          participantCount: userIds.length
         });
 
-        socket.emit('joinedSession', { sessionId });
-        console.log(`${socket.username} a rejoint la session ${sessionId} (${userCount} utilisateurs connectés)`);
+        // Confirm to the joining user
+        socket.emit('joinedSession', { 
+          sessionId,
+          userCount: userIds.length,
+          users: connectedUsersInfo
+        });
       } catch (error) {
         console.error('Erreur lors de la jointure de session:', error);
         socket.emit('error', { message: 'Erreur lors de la jointure de session' });
@@ -150,6 +232,16 @@ const handleConnection = (io) => {
       
       // Clean up user from session participants in DB
       await cleanupUserFromSession(sessionId, socket.userId);
+      
+      // Sync with actual remaining users
+      const remainingUserIds = await syncSessionConnections(io, sessionId);
+
+      // Broadcast updated participant list to remaining users
+      io.to(`session-${sessionId}`).emit('participantsUpdated', {
+        sessionId,
+        onlineUsers: remainingUserIds,
+        participantCount: remainingUserIds.length
+      });
       
       // Notify other participants that user left
       socket.to(`session-${sessionId}`).emit('userDisconnected', {
@@ -169,7 +261,7 @@ const handleConnection = (io) => {
         socket.currentSessionId = null;
       }
 
-      console.log(`${socket.username} a quitté la session ${sessionId} (${userCount} utilisateurs connectés)`);
+      console.log(`${socket.username} a quitté la session ${sessionId} (${remainingUserIds.length} utilisateurs connectés)`);
     });
 
     // Handle real-time voting updates
@@ -232,6 +324,47 @@ const handleConnection = (io) => {
       });
     });
 
+    // Handle presence sync requests
+    socket.on('requestPresenceSync', async (sessionId) => {
+      try {
+        console.log(`🔄 Synchronisation de présence demandée par ${socket.username} pour la session ${sessionId}`);
+        
+        // Get real-time connected users
+        const connectedUsersInfo = await getConnectedUsersInSession(io, sessionId);
+        const userIds = connectedUsersInfo.map(user => user.userId);
+        
+        // Update sessionConnections with current reality
+        if (userIds.length > 0) {
+          sessionConnections.set(sessionId, new Set(userIds));
+        } else {
+          sessionConnections.delete(sessionId);
+        }
+        
+        // Send updated list to requester first
+        socket.emit('sessionUsers', {
+          sessionId,
+          onlineUsers: userIds,
+          connectedUsers: connectedUsersInfo
+        });
+
+        // Broadcast comprehensive update to all users in session
+        io.to(`session-${sessionId}`).emit('participantsUpdated', {
+          sessionId,
+          onlineUsers: userIds,
+          participantCount: userIds.length,
+          connectedUsers: connectedUsersInfo,
+          syncType: 'presenceSync'
+        });
+
+        console.log(`✅ Synchronisation terminée pour la session ${sessionId}:`, {
+          userCount: userIds.length,
+          users: connectedUsersInfo.map(u => u.username)
+        });
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation de présence:', error);
+      }
+    });
+
     // Handle disconnection
     socket.on('disconnect', async () => {
       console.log(`Utilisateur déconnecté: ${socket.username} (${socket.userId})`);
@@ -243,6 +376,16 @@ const handleConnection = (io) => {
         
         // Clean up user from session participants in DB
         await cleanupUserFromSession(socket.currentSessionId, socket.userId);
+        
+        // Sync with actual remaining users
+        const remainingUserIds = await syncSessionConnections(io, socket.currentSessionId);
+
+        // Broadcast updated participant list to remaining users
+        io.to(`session-${socket.currentSessionId}`).emit('participantsUpdated', {
+          sessionId: socket.currentSessionId,
+          onlineUsers: remainingUserIds,
+          participantCount: remainingUserIds.length
+        });
         
         socket.to(`session-${socket.currentSessionId}`).emit('userDisconnected', {
           userId: socket.userId,
@@ -257,7 +400,7 @@ const handleConnection = (io) => {
           participantCount: userCount
         });
 
-        console.log(`${socket.username} déconnecté de la session ${socket.currentSessionId} (${userCount} utilisateurs restants)`);
+        console.log(`${socket.username} déconnecté de la session ${socket.currentSessionId} (${remainingUserIds.length} utilisateurs restants)`);
       }
     });
 
@@ -277,5 +420,7 @@ module.exports = {
   handleConnection,
   socketAuth,
   getSessionUserCount,
-  getAllSessionCounts
+  getAllSessionCounts,
+  getConnectedUsersInSession,
+  syncSessionConnections
 }; 
