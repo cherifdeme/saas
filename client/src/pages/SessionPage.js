@@ -64,6 +64,11 @@ function SessionPage() {
     
     return () => {
       clearTimeout(syncTimer);
+      // Only clear session storage if we're actually leaving the page/component
+      const isNavigatingAway = !window.location.pathname.includes(`/session/${id}`);
+      if (isNavigatingAway) {
+        sessionStorage.removeItem('currentSessionId');
+      }
       leaveSession(id);
       off('voteSubmitted', handleVoteSubmitted);
       off('votesRevealed', handleVotesRevealed);
@@ -167,11 +172,15 @@ function SessionPage() {
     if (data.sessionId === id) {
       setOnlineUsers(prev => {
         const newSet = new Set([...prev, data.userId]);
-        console.log('User connected:', data.userId, 'Online users:', Array.from(newSet));
+        console.log('✅ User connected:', data.username, 'Online users:', Array.from(newSet));
         return newSet;
       });
+      // Show toast notification for other users connecting
+      if (data.userId !== user?.id) {
+        toast.success(`${data.username} s'est connecté`);
+      }
     }
-  }, [id]);
+  }, [id, user?.id]);
 
   const handleSessionUsers = useCallback((data) => {
     if (data.sessionId === id) {
@@ -249,15 +258,35 @@ function SessionPage() {
         users: data.users
       });
       
-      // Ensure current user is marked as online
-      if (user?.id) {
-        setOnlineUsers(prev => new Set([...prev, user.id]));
+      // Update online users with the complete list from server
+      if (data.onlineUsers && Array.isArray(data.onlineUsers)) {
+        const newOnlineUsers = new Set(data.onlineUsers);
+        // Always ensure current user is marked as online
+        if (user?.id) {
+          newOnlineUsers.add(user.id);
+        }
+        setOnlineUsers(newOnlineUsers);
+        console.log('🔄 Updated online users from joinedSession:', Array.from(newOnlineUsers));
+      } else {
+        // Fallback: ensure current user is marked as online
+        if (user?.id) {
+          setOnlineUsers(prev => new Set([...prev, user.id]));
+        }
+      }
+      
+      // Update session connected users if provided
+      if (data.connectedUsers && Array.isArray(data.connectedUsers)) {
+        setSession(prev => prev ? {
+          ...prev,
+          connectedUsers: data.connectedUsers
+        } : null);
+        console.log('🔄 Updated session.connectedUsers from joinedSession:', data.connectedUsers);
       }
       
       // Force a presence sync to ensure we have the latest state
       setTimeout(() => {
         requestPresenceSync(id);
-      }, 500);
+      }, 300); // Reduced delay for faster response
     }
   }, [id, user?.id, requestPresenceSync]);
 
@@ -367,6 +396,8 @@ function SessionPage() {
     }
 
     try {
+      // Clear the session from storage first
+      sessionStorage.removeItem('currentSessionId');
       await sessionService.leaveSession(id);
       toast.success('Vous avez quitté la session');
       navigate('/dashboard');

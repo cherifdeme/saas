@@ -35,9 +35,18 @@ export function SocketProvider({ children }) {
     });
 
     socketRef.current.on('connect', () => {
-      console.log('Connecté au serveur WebSocket');
+      console.log('✅ Connecté au serveur WebSocket');
       setConnected(true);
       setSocket(socketRef.current);
+      
+      // Auto-rejoin session if there's one in localStorage/sessionStorage
+      const currentSessionId = sessionStorage.getItem('currentSessionId');
+      if (currentSessionId) {
+        console.log('🔄 Auto-rejoin session après reconnection:', currentSessionId);
+        setTimeout(() => {
+          socketRef.current?.emit('joinSession', currentSessionId);
+        }, 100); // Small delay to ensure socket is ready
+      }
     });
 
     socketRef.current.on('disconnect', () => {
@@ -85,13 +94,19 @@ export function SocketProvider({ children }) {
 
   const joinSession = useCallback((sessionId) => {
     if (socketRef.current) {
+      // Save session ID for auto-rejoin on reconnect
+      sessionStorage.setItem('currentSessionId', sessionId);
       socketRef.current.emit('joinSession', sessionId);
+      console.log('🚀 Joining session:', sessionId);
     }
   }, []);
 
   const leaveSession = useCallback((sessionId) => {
     if (socketRef.current) {
+      // Clear saved session ID
+      sessionStorage.removeItem('currentSessionId');
       socketRef.current.emit('leaveSession', sessionId);
+      console.log('👋 Leaving session:', sessionId);
     }
   }, []);
 

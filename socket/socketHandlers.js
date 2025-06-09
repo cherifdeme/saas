@@ -187,7 +187,8 @@ const handleConnection = (io) => {
         // Step 1: Send current state to the joining user first
         socket.emit('sessionUsers', {
           sessionId,
-          onlineUsers: userIds
+          onlineUsers: userIds,
+          connectedUsers: connectedUsersInfo
         });
 
         // Step 2: Broadcast to ALL users in session (including the joiner) the updated participant list
