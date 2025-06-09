@@ -26,6 +26,7 @@ function DashboardPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newSessionName, setNewSessionName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [sessionParticipantCounts, setSessionParticipantCounts] = useState({});
 
   useEffect(() => {
     loadSessions();
@@ -33,10 +34,14 @@ function DashboardPage() {
     // Listen for real-time session updates
     on('sessionCreated', handleSessionCreated);
     on('sessionDeleted', handleSessionDeleted);
+    on('sessionParticipantUpdate', handleSessionParticipantUpdate);
+    on('sessionParticipantCounts', handleSessionParticipantCounts);
     
     return () => {
       off('sessionCreated', handleSessionCreated);
       off('sessionDeleted', handleSessionDeleted);
+      off('sessionParticipantUpdate', handleSessionParticipantUpdate);
+      off('sessionParticipantCounts', handleSessionParticipantCounts);
     };
   }, [on, off]);
 
@@ -60,7 +65,23 @@ function DashboardPage() {
 
   const handleSessionDeleted = (data) => {
     setSessions(prev => prev.filter(session => session._id !== data.sessionId));
+    setSessionParticipantCounts(prev => {
+      const updated = { ...prev };
+      delete updated[data.sessionId];
+      return updated;
+    });
     toast.success('Session supprimée');
+  };
+
+  const handleSessionParticipantUpdate = (data) => {
+    setSessionParticipantCounts(prev => ({
+      ...prev,
+      [data.sessionId]: data.participantCount
+    }));
+  };
+
+  const handleSessionParticipantCounts = (counts) => {
+    setSessionParticipantCounts(counts);
   };
 
   const createSession = async (e) => {
@@ -226,7 +247,7 @@ function DashboardPage() {
                           Créée le {formatDate(session.createdAt)}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {session.participants.length} participant(s)
+                          {sessionParticipantCounts[session._id] || 0} participant(s) connecté(s)
                         </p>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -275,7 +296,7 @@ function DashboardPage() {
                           Par {session.createdBy.username}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {session.participants.length} participant(s)
+                          {sessionParticipantCounts[session._id] || 0} participant(s) connecté(s)
                         </p>
                       </div>
                       <button

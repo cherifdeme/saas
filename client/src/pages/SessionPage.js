@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -33,9 +33,13 @@ function SessionPage() {
   const [stats, setStats] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
 
+  // Load session data only once on mount
   useEffect(() => {
     loadSession();
-    
+  }, [id]); // Only depend on id
+
+  // Setup socket listeners and join session
+  useEffect(() => {
     // Join the session room
     joinSession(id);
     
@@ -44,8 +48,10 @@ function SessionPage() {
     on('votesRevealed', handleVotesRevealed);
     on('votesReset', handleVotesReset);
     on('userJoined', handleUserJoined);
+    on('userLeft', handleUserLeft);
     on('userConnected', handleUserConnected);
     on('userDisconnected', handleUserDisconnected);
+    on('sessionUsers', handleSessionUsers);
     on('ticketUpdated', handleTicketUpdated);
     
     return () => {
@@ -54,11 +60,13 @@ function SessionPage() {
       off('votesRevealed', handleVotesRevealed);
       off('votesReset', handleVotesReset);
       off('userJoined', handleUserJoined);
+      off('userLeft', handleUserLeft);
       off('userConnected', handleUserConnected);
       off('userDisconnected', handleUserDisconnected);
+      off('sessionUsers', handleSessionUsers);
       off('ticketUpdated', handleTicketUpdated);
     };
-  }, [id, joinSession, leaveSession, on, off]);
+  }, [id, joinSession, leaveSession, on, off]); // Keep socket dependencies
 
   const loadSession = async () => {
     try {
@@ -88,7 +96,7 @@ function SessionPage() {
     }
   };
 
-  const handleVoteSubmitted = (data) => {
+  const handleVoteSubmitted = useCallback((data) => {
     if (data.sessionId === id) {
       setVotes(prev => {
         const existingIndex = prev.findIndex(vote => 
@@ -104,18 +112,18 @@ function SessionPage() {
         }
       });
     }
-  };
+  }, [id]);
 
-  const handleVotesRevealed = (data) => {
+  const handleVotesRevealed = useCallback((data) => {
     if (data.sessionId === id) {
       setVotes(data.votes);
       setVotesRevealed(true);
       setStats(data.stats);
       toast.success('Votes révélés !');
     }
-  };
+  }, [id]);
 
-  const handleVotesReset = (data) => {
+  const handleVotesReset = useCallback((data) => {
     if (data.sessionId === id) {
       setVotes([]);
       setVotesRevealed(false);
@@ -123,21 +131,35 @@ function SessionPage() {
       setStats(null);
       toast.success('Votes réinitialisés !');
     }
-  };
+  }, [id]);
 
-  const handleUserJoined = (data) => {
+  const handleUserJoined = useCallback((data) => {
     if (data.sessionId === id) {
       toast.success(`${data.user.username} a rejoint la session`);
     }
-  };
+  }, [id]);
 
-  const handleUserConnected = (data) => {
+  const handleUserLeft = useCallback((data) => {
+    if (data.sessionId === id) {
+      toast.info(`${data.user.username} a quitté la session`);
+      // Refresh session data to update participant list
+      loadSession();
+    }
+  }, [id]);
+
+  const handleUserConnected = useCallback((data) => {
     if (data.sessionId === id) {
       setOnlineUsers(prev => new Set([...prev, data.userId]));
     }
-  };
+  }, [id]);
 
-  const handleUserDisconnected = (data) => {
+  const handleSessionUsers = useCallback((data) => {
+    if (data.sessionId === id) {
+      setOnlineUsers(new Set(data.onlineUsers));
+    }
+  }, [id]);
+
+  const handleUserDisconnected = useCallback((data) => {
     if (data.sessionId === id) {
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
@@ -145,14 +167,14 @@ function SessionPage() {
         return newSet;
       });
     }
-  };
+  }, [id]);
 
-  const handleTicketUpdated = (data) => {
+  const handleTicketUpdated = useCallback((data) => {
     if (data.sessionId === id) {
       setSession(prev => ({ ...prev, currentTicket: data.ticket }));
       toast.success('Ticket mis à jour');
     }
-  };
+  }, [id]);
 
   const submitVote = async (cardValue) => {
     if (votesRevealed) {
@@ -185,6 +207,21 @@ function SessionPage() {
     } catch (error) {
       toast.error('Erreur lors de la réinitialisation des votes');
       console.error('Error resetting votes:', error);
+    }
+  };
+
+  const leaveSessionHandler = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir quitter cette session ?')) {
+      return;
+    }
+
+    try {
+      await sessionService.leaveSession(id);
+      toast.success('Vous avez quitté la session');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error('Erreur lors de la sortie de session');
+      console.error('Error leaving session:', error);
     }
   };
 
@@ -261,6 +298,19 @@ function SessionPage() {
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Reset
+                  </button>
+                </div>
+              )}
+
+              {/* Participant controls (Leave button for non-admin) */}
+              {!isAdmin && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={leaveSessionHandler}
+                    className="btn-secondary flex items-center text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Quitter la session
                   </button>
                 </div>
               )}

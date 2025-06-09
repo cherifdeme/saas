@@ -125,11 +125,11 @@ router.post('/:id/join', authenticate, async (req, res) => {
     }
 
     // Check if user is already a participant
-    if (session.participants.includes(req.user._id)) {
-      return res.status(400).json({ message: 'Vous participez déjà à cette session' });
+    const isAlreadyParticipant = session.participants.includes(req.user._id);
+    
+    if (!isAlreadyParticipant) {
+      session.participants.push(req.user._id);
     }
-
-    session.participants.push(req.user._id);
     await session.save();
     await session.populate('createdBy', 'username');
     await session.populate('participants', 'username');
@@ -143,6 +143,48 @@ router.post('/:id/join', authenticate, async (req, res) => {
     res.json({ message: 'Vous avez rejoint la session', session });
   } catch (error) {
     console.error('Erreur lors de la participation à la session:', error);
+    res.status(500).json({ message: 'Erreur interne du serveur' });
+  }
+});
+
+// @route   POST /api/sessions/:id/leave
+// @desc    Leave a session
+// @access  Private
+router.post('/:id/leave', authenticate, async (req, res) => {
+  try {
+    const session = await Session.findById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({ message: 'Session non trouvée' });
+    }
+
+    // Check if user is a participant
+    if (!session.participants.includes(req.user._id)) {
+      return res.status(400).json({ message: 'Vous ne participez pas à cette session' });
+    }
+
+    // Don't allow the creator to leave their own session
+    if (session.createdBy.toString() === req.user._id.toString()) {
+      return res.status(400).json({ message: 'Le créateur ne peut pas quitter sa propre session' });
+    }
+
+    // Remove user from participants list
+    session.participants = session.participants.filter(
+      p => p.toString() !== req.user._id.toString()
+    );
+    await session.save();
+    await session.populate('createdBy', 'username');
+    await session.populate('participants', 'username');
+
+    // Emit to all clients in this session
+    req.io.to(`session-${session._id}`).emit('userLeft', {
+      sessionId: session._id,
+      user: { id: req.user._id, username: req.user.username }
+    });
+
+    res.json({ message: 'Vous avez quitté la session', session });
+  } catch (error) {
+    console.error('Erreur lors de la sortie de session:', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });

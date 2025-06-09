@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { toast } from 'react-hot-toast';
@@ -83,41 +83,41 @@ export function SocketProvider({ children }) {
     }
   };
 
-  const joinSession = (sessionId) => {
+  const joinSession = useCallback((sessionId) => {
     if (socketRef.current) {
       socketRef.current.emit('joinSession', sessionId);
     }
-  };
+  }, []);
 
-  const leaveSession = (sessionId) => {
+  const leaveSession = useCallback((sessionId) => {
     if (socketRef.current) {
       socketRef.current.emit('leaveSession', sessionId);
     }
-  };
+  }, []);
 
-  const emitVoteUpdate = (data) => {
+  const emitVoteUpdate = useCallback((data) => {
     if (socketRef.current) {
       socketRef.current.emit('voteUpdate', data);
     }
-  };
+  }, []);
 
-  const emitAdminAction = (data) => {
+  const emitAdminAction = useCallback((data) => {
     if (socketRef.current) {
       socketRef.current.emit('adminAction', data);
     }
-  };
+  }, []);
 
-  const on = (event, callback) => {
+  const on = useCallback((event, callback) => {
     if (socketRef.current) {
       socketRef.current.on(event, callback);
     }
-  };
+  }, []);
 
-  const off = (event, callback) => {
+  const off = useCallback((event, callback) => {
     if (socketRef.current) {
       socketRef.current.off(event, callback);
     }
-  };
+  }, []);
 
   const value = {
     socket,

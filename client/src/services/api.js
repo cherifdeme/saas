@@ -36,6 +36,7 @@ export const sessionService = {
   getSession: (id) => api.get(`/sessions/${id}`),
   createSession: (sessionData) => api.post('/sessions', sessionData),
   joinSession: (id) => api.post(`/sessions/${id}/join`),
+  leaveSession: (id) => api.post(`/sessions/${id}/leave`),
   deleteSession: (id) => api.delete(`/sessions/${id}`),
   updateTicket: (id, ticketData) => api.put(`/sessions/${id}/ticket`, ticketData),
 };
