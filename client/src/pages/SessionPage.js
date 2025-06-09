@@ -23,7 +23,7 @@ function SessionPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { joinSession, leaveSession, on, off, requestPresenceSync } = useSocket();
+  const { socket, joinSession, leaveSession, on, off, requestPresenceSync } = useSocket();
   
   const [session, setSession] = useState(null);
   const [votes, setVotes] = useState([]);
@@ -38,10 +38,63 @@ function SessionPage() {
     loadSession();
   }, [id]); // Only depend on id
 
+  // Detect page refresh and handle it as session exit
+  useEffect(() => {
+    // Temporairement désactivé pour permettre de rejoindre les sessions
+    /*
+    // Vérifier si c'est un refresh de page
+    const isPageRefresh = performance.navigation.type === 1 || 
+      (performance.getEntriesByType('navigation')[0] && 
+       performance.getEntriesByType('navigation')[0].type === 'reload');
+    
+    if (isPageRefresh) {
+      console.log('🔄 Refresh détecté sur SessionPage - sortie automatique');
+      // Nettoyer le sessionStorage et rediriger
+      sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
+      
+      // Redirection immédiate vers le dashboard
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+    */
+  }, [navigate]);
+
+  // Handle page unload/refresh with beforeunload event
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      // Si nous sommes dans une session, faire le ménage
+      const currentSessionId = sessionStorage.getItem('currentSessionId');
+      if (currentSessionId && id) {
+        console.log('🚪 Beforeunload: Nettoyage session avant fermeture/refresh');
+        
+        // Émettre leaveSession de manière synchrone
+        if (socket) {
+          socket.emit('leaveSession', currentSessionId);
+        }
+        
+        // Nettoyer le sessionStorage
+        sessionStorage.removeItem('currentSessionId');
+        sessionStorage.removeItem('currentUserId');
+        sessionStorage.removeItem('currentUsername');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [id, socket]);
+
   // Setup socket listeners and join session
   useEffect(() => {
-    // Join the session room
-    joinSession(id);
+    // Join the session room with user info
+    joinSession(id, {
+      userId: user?.id,
+      username: user?.username
+    });
     
     // Request presence sync after a short delay to ensure connection is established
     const syncTimer = setTimeout(() => {
@@ -60,6 +113,10 @@ function SessionPage() {
     on('sessionUsers', handleSessionUsers);
     on('participantsUpdated', handleParticipantsUpdated);
     on('joinedSession', handleJoinedSession);
+    on('rejoinedSession', handleRejoinedSession);
+    on('sessionNotFound', handleSessionNotFound);
+    on('sessionNotAuthorized', handleSessionNotAuthorized);
+    on('error', handleWebSocketError);
     on('ticketUpdated', handleTicketUpdated);
     
     return () => {
@@ -68,6 +125,8 @@ function SessionPage() {
       const isNavigatingAway = !window.location.pathname.includes(`/session/${id}`);
       if (isNavigatingAway) {
         sessionStorage.removeItem('currentSessionId');
+        sessionStorage.removeItem('currentUserId');
+        sessionStorage.removeItem('currentUsername');
       }
       leaveSession(id);
       off('voteSubmitted', handleVoteSubmitted);
@@ -80,9 +139,13 @@ function SessionPage() {
       off('sessionUsers', handleSessionUsers);
       off('participantsUpdated', handleParticipantsUpdated);
       off('joinedSession', handleJoinedSession);
+      off('rejoinedSession', handleRejoinedSession);
+      off('sessionNotFound', handleSessionNotFound);
+      off('sessionNotAuthorized', handleSessionNotAuthorized);
+      off('error', handleWebSocketError);
       off('ticketUpdated', handleTicketUpdated);
     };
-  }, [id, joinSession, leaveSession, on, off, requestPresenceSync]); // Keep socket dependencies
+  }, [id, socket, joinSession, leaveSession, on, off, requestPresenceSync, user?.id, user?.username]); // Keep socket dependencies
 
   const loadSession = async () => {
     try {
@@ -290,6 +353,79 @@ function SessionPage() {
     }
   }, [id, user?.id, requestPresenceSync]);
 
+  // Handler for successful rejoin after refresh
+  const handleRejoinedSession = useCallback((data) => {
+    if (data.sessionId === id) {
+      console.log('✅ Successfully rejoined session after refresh:', {
+        sessionId: data.sessionId,
+        userCount: data.userCount,
+        users: data.users,
+        isAdmin: data.isAdmin
+      });
+      
+      // Update online users
+      if (data.users && data.users.length > 0) {
+        const newOnlineUsers = new Set(data.users);
+        setOnlineUsers(newOnlineUsers);
+        console.log('🔄 Updated online users from rejoinedSession:', Array.from(newOnlineUsers));
+      }
+      
+      // Update session.connectedUsers
+      if (data.connectedUsers) {
+        setSession(prev => prev ? {
+          ...prev,
+          connectedUsers: data.connectedUsers
+        } : null);
+      }
+      
+      toast.success('Reconnecté à la session');
+    }
+  }, [id]);
+
+  // Handler for session not found error
+  const handleSessionNotFound = useCallback((data) => {
+    if (data.sessionId === id) {
+      console.error('❌ Session not found:', data.sessionId);
+      sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
+      toast.error('Session introuvable ou expirée');
+      navigate('/dashboard');
+    }
+  }, [id, navigate]);
+
+  // Handler for session not authorized error
+  const handleSessionNotAuthorized = useCallback((data) => {
+    if (data.sessionId === id) {
+      console.error('❌ Session not authorized:', data.sessionId);
+      sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
+      toast.error('Accès non autorisé à cette session');
+      navigate('/dashboard');
+    }
+  }, [id, navigate]);
+
+  // Handler for WebSocket errors
+  const handleWebSocketError = useCallback((error) => {
+    console.error('❌ Erreur WebSocket:', error);
+    
+    if (error.message?.includes('session')) {
+      // Si c'est une erreur de session, nettoyer et rediriger
+      if (error.message.includes('invalide') || error.message.includes('manquantes')) {
+        sessionStorage.removeItem('currentSessionId');
+        sessionStorage.removeItem('currentUserId');
+        sessionStorage.removeItem('currentUsername');
+        toast.error('Données de session corrompues');
+        navigate('/dashboard');
+      } else {
+        toast.error(error.message || 'Erreur de connexion');
+      }
+    } else {
+      toast.error('Erreur WebSocket: ' + (error.message || 'Erreur inconnue'));
+    }
+  }, [navigate]);
+
   // Create dynamic participants list combining session data with real-time online status
   const getActiveParticipants = useCallback(() => {
     if (!session?.participants) return [];
@@ -396,8 +532,10 @@ function SessionPage() {
     }
 
     try {
-      // Clear the session from storage first
+      // Clear all session data from storage first
       sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
       await sessionService.leaveSession(id);
       toast.success('Vous avez quitté la session');
       navigate('/dashboard');

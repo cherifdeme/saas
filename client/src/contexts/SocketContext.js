@@ -39,13 +39,53 @@ export function SocketProvider({ children }) {
       setConnected(true);
       setSocket(socketRef.current);
       
-      // Auto-rejoin session if there's one in localStorage/sessionStorage
+      // Auto-rejoin session if there's one in sessionStorage
       const currentSessionId = sessionStorage.getItem('currentSessionId');
-      if (currentSessionId) {
-        console.log('🔄 Auto-rejoin session après reconnection:', currentSessionId);
+      const currentUserId = sessionStorage.getItem('currentUserId');
+      const currentUsername = sessionStorage.getItem('currentUsername');
+      
+      if (currentSessionId && currentUserId && currentUsername) {
+        console.log('🔄 Auto-rejoin session après reconnection:', {
+          sessionId: currentSessionId,
+          userId: currentUserId,
+          username: currentUsername
+        });
+        
+        // Validation supplémentaire des données
+        if (currentSessionId.length < 10 || currentUserId.length < 10) {
+          console.log('❌ Données de session corrompues, nettoyage...');
+          sessionStorage.removeItem('currentSessionId');
+          sessionStorage.removeItem('currentUserId');
+          sessionStorage.removeItem('currentUsername');
+          return;
+        }
+        
         setTimeout(() => {
-          socketRef.current?.emit('joinSession', currentSessionId);
-        }, 100); // Small delay to ensure socket is ready
+          if (socketRef.current) {
+            console.log('🚪 Détection refresh : Sortie automatique de session:', currentSessionId);
+            
+            // Émettre leaveSession pour nettoyer côté serveur
+            console.log('📤 Émission leaveSession après refresh...');
+            socketRef.current.emit('leaveSession', currentSessionId);
+            
+            // Nettoyer le sessionStorage
+            sessionStorage.removeItem('currentSessionId');
+            sessionStorage.removeItem('currentUserId');
+            sessionStorage.removeItem('currentUsername');
+            
+            // Rediriger vers dashboard après un court délai
+            setTimeout(() => {
+              console.log('🏠 Redirection vers dashboard après refresh...');
+              window.location.href = '/dashboard';
+            }, 100);
+          }
+        }, 200); // Delay to ensure socket is ready
+      } else {
+        console.log('🔍 Données manquantes pour auto-rejoin:', {
+          hasSessionId: !!currentSessionId,
+          hasUserId: !!currentUserId,
+          hasUsername: !!currentUsername
+        });
       }
     });
 
@@ -67,6 +107,14 @@ export function SocketProvider({ children }) {
     // Global event handlers
     socketRef.current.on('connected', (data) => {
       console.log('WebSocket authentifié:', data);
+    });
+
+    socketRef.current.on('leftSession', (data) => {
+      if (data.success) {
+        console.log('✅ Sortie de session confirmée:', data.sessionId);
+      } else {
+        console.error('❌ Erreur lors de la sortie:', data.error);
+      }
     });
 
     socketRef.current.on('userConnected', (data) => {
@@ -92,19 +140,24 @@ export function SocketProvider({ children }) {
     }
   };
 
-  const joinSession = useCallback((sessionId) => {
+  const joinSession = useCallback((sessionId, userInfo = {}) => {
     if (socketRef.current) {
-      // Save session ID for auto-rejoin on reconnect
+      // Save session info for auto-rejoin on reconnect
       sessionStorage.setItem('currentSessionId', sessionId);
+      if (userInfo.userId) sessionStorage.setItem('currentUserId', userInfo.userId);
+      if (userInfo.username) sessionStorage.setItem('currentUsername', userInfo.username);
+      
       socketRef.current.emit('joinSession', sessionId);
-      console.log('🚀 Joining session:', sessionId);
+      console.log('🚀 Joining session:', sessionId, userInfo);
     }
   }, []);
 
   const leaveSession = useCallback((sessionId) => {
     if (socketRef.current) {
-      // Clear saved session ID
+      // Clear all saved session data
       sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
       socketRef.current.emit('leaveSession', sessionId);
       console.log('👋 Leaving session:', sessionId);
     }

@@ -135,7 +135,8 @@ const handleConnection = (io) => {
     socket.join(`user-${socket.userId}`);
 
     // Handle joining a session room
-    socket.on('joinSession', async (sessionId) => {
+    // Handler for regular session join
+  socket.on('joinSession', async (sessionId) => {
       try {
         const session = await Session.findById(sessionId);
         if (!session) {
@@ -221,11 +222,134 @@ const handleConnection = (io) => {
       } catch (error) {
         console.error('Erreur lors de la jointure de session:', error);
         socket.emit('error', { message: 'Erreur lors de la jointure de session' });
-      }
+              }
+    });
+
+    // Handler for session rejoin (after page refresh)
+    socket.on('rejoinSession', async (data) => {
+        try {
+            console.log('🔄 Tentative de rejoin avec données:', data);
+            
+            const { sessionId, userId, username, reconnect } = data;
+            
+            // Validation des données reçues
+            if (!sessionId || !userId || !username) {
+                console.log('❌ Données manquantes pour rejoin:', { sessionId, userId, username });
+                socket.emit('error', { message: 'Données de session manquantes' });
+                return;
+            }
+            
+            console.log(`🔄 ${username} rejoint la session ${sessionId} après refresh`);
+            
+            // Verify session still exists
+            const session = await Session.findById(sessionId);
+            if (!session) {
+                console.log(`❌ Session ${sessionId} not found for rejoin`);
+                socket.emit('sessionNotFound', { sessionId });
+                return;
+            }
+            
+            console.log(`✅ Session ${sessionId} trouvée:`, {
+                admin: session.admin,
+                participantsCount: session.participants.length
+            });
+            
+            // Verify user is still part of the session
+            const isParticipant = session.participants.some(p => p.toString() === userId);
+            const isAdmin = session.admin && session.admin.toString() === userId;
+            
+            if (!isParticipant && !isAdmin) {
+                console.log(`❌ User ${username} not authorized for session ${sessionId}`);
+                socket.emit('sessionNotAuthorized', { sessionId });
+                return;
+            }
+            
+            // Store user info in socket
+            socket.userId = userId;
+            socket.username = username;
+            socket.sessionId = sessionId;
+            
+            // Add user to session connections
+            if (!sessionConnections.has(sessionId)) {
+                sessionConnections.set(sessionId, new Map());
+            }
+            sessionConnections.get(sessionId).set(userId, {
+                socketId: socket.id,
+                username: username,
+                joinedAt: new Date()
+            });
+            
+            // Add socket to room
+            await new Promise((resolve) => {
+                socket.join(`session-${sessionId}`, resolve);
+            });
+            
+            // Small delay to ensure socket is in room
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Get current connected users
+            const connectedUsersInfo = await getConnectedUsersInSession(sessionId);
+            const userIds = connectedUsersInfo.map(u => u.userId);
+            
+            console.log(`✅ ${username} reconnecté à la session ${sessionId}:`, {
+                userCount: userIds.length,
+                users: userIds,
+                isAdmin: isAdmin
+            });
+            
+            // Step 1: Send current state to the rejoining user
+            socket.emit('sessionUsers', {
+                sessionId,
+                onlineUsers: userIds,
+                connectedUsers: connectedUsersInfo
+            });
+            
+            // Step 2: Emit participantsUpdated to ALL users in the room
+            io.to(`session-${sessionId}`).emit('participantsUpdated', {
+                sessionId,
+                connectedUsers: connectedUsersInfo,
+                onlineUsers: userIds
+            });
+            
+            // Step 3: Notify other users of reconnection
+            socket.to(`session-${sessionId}`).emit('userConnected', {
+                sessionId,
+                userId: userId,
+                username: username,
+                reconnect: true
+            });
+            
+            // Step 4: Confirm to rejoining user
+            socket.emit('rejoinedSession', {
+                sessionId,
+                userCount: userIds.length,
+                users: userIds,
+                isAdmin: isAdmin,
+                connectedUsers: connectedUsersInfo
+            });
+            
+        } catch (error) {
+            console.error('❌ Erreur détaillée dans rejoinSession:', {
+                error: error.message,
+                stack: error.stack,
+                data: data
+            });
+            
+            // Envoyer une erreur plus spécifique selon le type
+            if (error.name === 'CastError') {
+                socket.emit('error', { message: 'ID de session invalide' });
+            } else if (error.name === 'ValidationError') {
+                socket.emit('error', { message: 'Données de session invalides' });
+            } else {
+                socket.emit('error', { message: `Erreur de reconnexion: ${error.message}` });
+            }
+        }
     });
 
     // Handle leaving a session room
     socket.on('leaveSession', async (sessionId) => {
+      console.log(`🚪 ${socket.username} quitte la session ${sessionId} (sortie ou refresh)`);
+      
       socket.leave(`session-${sessionId}`);
       
       // Remove user from session tracking
@@ -262,7 +386,10 @@ const handleConnection = (io) => {
         socket.currentSessionId = null;
       }
 
-      console.log(`${socket.username} a quitté la session ${sessionId} (${remainingUserIds.length} utilisateurs connectés)`);
+      console.log(`✅ ${socket.username} a quitté la session ${sessionId} (${remainingUserIds.length} utilisateurs connectés)`);
+      
+      // Confirmer la sortie au client
+      socket.emit('leftSession', { sessionId, success: true });
     });
 
     // Handle real-time voting updates
