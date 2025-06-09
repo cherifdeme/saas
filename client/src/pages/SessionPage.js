@@ -33,6 +33,51 @@ function SessionPage() {
   const [stats, setStats] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
 
+  // Déclaration de loadSession
+  const loadSession = async () => {
+    try {
+      setLoading(true);
+      const [sessionResponse, votesResponse] = await Promise.all([
+        sessionService.getSession(id),
+        voteService.getVotes(id)
+      ]);
+      
+      setSession(sessionResponse.data);
+      setVotes(votesResponse.data.votes || []);
+      setVotesRevealed(votesResponse.data.revealed || false);
+      
+      // Find user's current vote
+      const userVote = votesResponse.data.votes?.find(vote => 
+        vote.userId === user?.id || vote.userId?._id === user?.id
+      );
+      if (userVote && userVote.value) {
+        setSelectedCard(userVote.value);
+      }
+
+      // Initialize current user as online since they're loading the session
+      if (user?.id) {
+        setOnlineUsers(prev => new Set([...prev, user.id]));
+      }
+    } catch (error) {
+      toast.error('Erreur lors du chargement de la session');
+      console.error('Error loading session:', error);
+      navigate('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handler pour la suppression de session en temps réel
+  const handleSessionDeleted = useCallback((data) => {
+    if (data.sessionId === id) {
+      sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
+      toast.error('Cette session a été supprimée.');
+      navigate('/dashboard');
+    }
+  }, [id, navigate]);
+
   // Load session data only once on mount
   useEffect(() => {
     loadSession();
@@ -118,6 +163,7 @@ function SessionPage() {
     on('sessionNotAuthorized', handleSessionNotAuthorized);
     on('error', handleWebSocketError);
     on('ticketUpdated', handleTicketUpdated);
+    on('sessionDeleted', handleSessionDeleted);
     
     return () => {
       clearTimeout(syncTimer);
@@ -144,41 +190,9 @@ function SessionPage() {
       off('sessionNotAuthorized', handleSessionNotAuthorized);
       off('error', handleWebSocketError);
       off('ticketUpdated', handleTicketUpdated);
+      off('sessionDeleted', handleSessionDeleted);
     };
-  }, [id, socket, joinSession, leaveSession, on, off, requestPresenceSync, user?.id, user?.username]); // Keep socket dependencies
-
-  const loadSession = async () => {
-    try {
-      setLoading(true);
-      const [sessionResponse, votesResponse] = await Promise.all([
-        sessionService.getSession(id),
-        voteService.getVotes(id)
-      ]);
-      
-      setSession(sessionResponse.data);
-      setVotes(votesResponse.data.votes || []);
-      setVotesRevealed(votesResponse.data.revealed || false);
-      
-      // Find user's current vote
-      const userVote = votesResponse.data.votes?.find(vote => 
-        vote.userId === user?.id || vote.userId?._id === user?.id
-      );
-      if (userVote && userVote.value) {
-        setSelectedCard(userVote.value);
-      }
-
-      // Initialize current user as online since they're loading the session
-      if (user?.id) {
-        setOnlineUsers(prev => new Set([...prev, user.id]));
-      }
-    } catch (error) {
-      toast.error('Erreur lors du chargement de la session');
-      console.error('Error loading session:', error);
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [id, socket, joinSession, leaveSession, on, off, requestPresenceSync, user?.id, user?.username]); // Keep socket dependencies sans handleSessionDeleted
 
   const handleVoteSubmitted = useCallback((data) => {
     if (data.sessionId === id) {
@@ -225,9 +239,34 @@ function SessionPage() {
 
   const handleUserLeft = useCallback((data) => {
     if (data.sessionId === id) {
-      toast.info(`${data.user.username} a quitté la session`);
-      // Refresh session data to update participant list
-      loadSession();
+      // Mise à jour immédiate de la liste des utilisateurs en ligne
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(data.user.id);
+        console.log('👋 User left:', data.user.username, 'Online users:', Array.from(newSet));
+        return newSet;
+      });
+      
+      // Mettre à jour aussi la liste des participants dans la session
+      setSession(prev => {
+        if (!prev) return prev;
+        
+        const updatedParticipants = prev.participants.filter(
+          participant => participant._id !== data.user.id
+        );
+        
+        const updatedConnectedUsers = (prev.connectedUsers || []).filter(
+          connectedUser => connectedUser.userId !== data.user.id
+        );
+        
+        return {
+          ...prev,
+          participants: updatedParticipants,
+          connectedUsers: updatedConnectedUsers
+        };
+      });
+      
+      toast.success(`${data.user.username} a quitté la session`);
     }
   }, [id]);
 
@@ -271,7 +310,22 @@ function SessionPage() {
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(data.userId);
+        console.log('🔌 User disconnected:', data.username, 'Online users:', Array.from(newSet));
         return newSet;
+      });
+      
+      // Mettre à jour aussi la liste des participants dans la session
+      setSession(prev => {
+        if (!prev) return prev;
+        
+        const updatedConnectedUsers = (prev.connectedUsers || []).filter(
+          connectedUser => connectedUser.userId !== data.userId
+        );
+        
+        return {
+          ...prev,
+          connectedUsers: updatedConnectedUsers
+        };
       });
     }
   }, [id]);
@@ -303,13 +357,15 @@ function SessionPage() {
         newOnlineUsersSet: Array.from(newOnlineUsers)
       });
       
-      // Update session data if we have connected users info
-      if (data.connectedUsers && data.connectedUsers.length > 0) {
-        setSession(prev => prev ? {
+      // Always update session data with connected users info
+      setSession(prev => {
+        if (!prev) return prev;
+        
+        return {
           ...prev,
-          connectedUsers: data.connectedUsers
-        } : null);
-      }
+          connectedUsers: data.connectedUsers || []
+        };
+      });
     }
   }, [id, user?.id]);
 
@@ -526,8 +582,84 @@ function SessionPage() {
     }
   };
 
+  const handleBackToDashboard = async () => {
+    try {
+      // Émettre immédiatement l'événement WebSocket pour une mise à jour temps réel
+      leaveSession(id);
+      
+      // Clear all session data from storage
+      sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
+      
+      // Essayer l'appel API (peut échouer si l'utilisateur est le créateur)
+      try {
+        await sessionService.leaveSession(id);
+      } catch (apiError) {
+        // Si l'erreur indique que l'utilisateur est le créateur, c'est normal
+        // On continue la navigation mais on laisse la session active côté serveur
+        if (apiError.response?.status === 400 && apiError.response?.data?.message?.includes('créateur')) {
+          console.log('Créateur navigant vers le dashboard - session reste active');
+        } else {
+          console.error('Erreur API lors du retour au dashboard:', apiError);
+        }
+      }
+      
+      // Naviguer vers le dashboard
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error leaving session on back:', error);
+      // Naviguer quand même vers le dashboard
+      navigate('/dashboard');
+    }
+  };
+
   const leaveSessionHandler = async () => {
     if (!window.confirm('Êtes-vous sûr de vouloir quitter cette session ?')) {
+      return;
+    }
+
+    try {
+      // Émettre immédiatement l'événement WebSocket pour une mise à jour temps réel
+      leaveSession(id);
+      
+      // Clear all session data from storage
+      sessionStorage.removeItem('currentSessionId');
+      sessionStorage.removeItem('currentUserId');
+      sessionStorage.removeItem('currentUsername');
+      
+      // Appel API pour persister côté serveur
+      await sessionService.leaveSession(id);
+      toast.success('Vous avez quitté la session');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error leaving session:', error);
+      
+      // Si l'erreur indique que l'utilisateur est le créateur
+      if (error.response?.status === 400 && error.response?.data?.message?.includes('créateur')) {
+        // Proposer de supprimer la session à la place
+        const shouldDelete = window.confirm(
+          'En tant que créateur, vous ne pouvez pas quitter cette session. Voulez-vous la supprimer définitivement ?'
+        );
+        
+        if (shouldDelete) {
+          await deleteSessionHandler();
+        } else {
+          // Restaurer la session dans le storage si l'utilisateur annule
+          sessionStorage.setItem('currentSessionId', id);
+          sessionStorage.setItem('currentUserId', user?.id || '');
+          sessionStorage.setItem('currentUsername', user?.username || '');
+        }
+      } else {
+        // Pour les autres erreurs, afficher le message et naviguer quand même
+        toast.error('Erreur lors de la sortie de session');
+        navigate('/dashboard');
+      }
+    }
+  };
+
+  const deleteSessionHandler = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer définitivement cette session ? Cette action est irréversible.')) {
       return;
     }
 
@@ -536,12 +668,18 @@ function SessionPage() {
       sessionStorage.removeItem('currentSessionId');
       sessionStorage.removeItem('currentUserId');
       sessionStorage.removeItem('currentUsername');
-      await sessionService.leaveSession(id);
-      toast.success('Vous avez quitté la session');
+      
+      // Appel API pour supprimer la session
+      await sessionService.deleteSession(id);
+      toast.success('Session supprimée avec succès');
       navigate('/dashboard');
     } catch (error) {
-      toast.error('Erreur lors de la sortie de session');
-      console.error('Error leaving session:', error);
+      console.error('Error deleting session:', error);
+      toast.error('Erreur lors de la suppression de la session');
+      // Restaurer la session dans le storage en cas d'erreur
+      sessionStorage.setItem('currentSessionId', id);
+      sessionStorage.setItem('currentUserId', user?.id || '');
+      sessionStorage.setItem('currentUsername', user?.username || '');
     }
   };
 
@@ -563,7 +701,7 @@ function SessionPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Session non trouvée</h1>
-          <button onClick={() => navigate('/dashboard')} className="btn-primary">
+          <button onClick={handleBackToDashboard} className="btn-primary">
             Retour au tableau de bord
           </button>
         </div>
@@ -579,7 +717,7 @@ function SessionPage() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={handleBackToDashboard}
                 className="btn-secondary mr-4 flex items-center"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -596,7 +734,7 @@ function SessionPage() {
               <div className="flex items-center space-x-2">
                 <Users className="h-5 w-5 text-gray-500" />
                 <span className="text-sm text-gray-600">
-                  {session.participants?.length || 0} participant(s)
+                  {activeParticipants.length} participant(s) en ligne
                 </span>
               </div>
               

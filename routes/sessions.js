@@ -194,7 +194,7 @@ router.post('/:id/leave', authenticate, async (req, res) => {
 // @access  Private
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const session = await Session.findById(req.params.id);
+    const session = await Session.findById(req.params.id).populate('participants', 'username');
 
     if (!session) {
       return res.status(404).json({ message: 'Session non trouvée' });
@@ -205,13 +205,31 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ message: 'Vous n\'avez pas la permission de supprimer cette session' });
     }
 
+    // Notifier tous les participants de la session qu'elle va être supprimée
+    // Émission spécifique à la room de la session
+    req.io.to(`session-${session._id}`).emit('sessionDeleted', { 
+      sessionId: session._id,
+      sessionName: session.name,
+      deletedBy: req.user.username
+    });
+
+    // Forcer la déconnexion de tous les sockets de cette session
+    const socketsInRoom = await req.io.in(`session-${session._id}`).fetchSockets();
+    for (const socket of socketsInRoom) {
+      socket.leave(`session-${session._id}`);
+      // Nettoyer les données de session du socket
+      if (socket.currentSessionId === session._id.toString()) {
+        socket.currentSessionId = null;
+      }
+    }
+
     // Delete all votes related to this session
     await Vote.deleteMany({ sessionId: session._id });
     
     // Delete the session
     await Session.findByIdAndDelete(req.params.id);
 
-    // Emit to all clients
+    // Emit to all clients pour mettre à jour les listes de sessions
     req.io.emit('sessionDeleted', { sessionId: session._id });
 
     res.json({ message: 'Session supprimée avec succès' });
