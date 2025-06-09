@@ -495,7 +495,7 @@ function SessionPage() {
                         
                         <div className="flex items-center space-x-2">
                           {votesRevealed && userVote ? (
-                            <div className="vote-card revealed text-lg">
+                            <div className="vote-card-mini">
                               {userVote.value}
                             </div>
                           ) : hasUserVoted ? (

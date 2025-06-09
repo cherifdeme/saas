@@ -93,6 +93,10 @@
   .vote-card.revealed {
     @apply border-blue-500 bg-blue-50 text-blue-700;
   }
+
+  .vote-card-mini {
+    @apply w-8 h-8 bg-white border-2 border-blue-500 bg-blue-50 text-blue-700 rounded-md flex items-center justify-center text-sm font-bold shadow-sm;
+  }
 }
 
 @layer utilities {
