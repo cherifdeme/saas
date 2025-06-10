@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Cache backend dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-backend-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-backend-
+          
+    - name: Cache frontend dependencies  
+      uses: actions/cache@v3
+      with:
+        path: client/node_modules
+        key: ${{ runner.os }}-frontend-${{ hashFiles('client/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-frontend-
+    
+    - name: Install backend dependencies
+      run: npm ci
+      
+    - name: Install frontend dependencies
+      run: |
+        cd client
+        npm ci
+        
+    - name: Lint backend code
+      run: npx eslint . --ext .js --ignore-path .gitignore
+      
+    - name: Lint frontend code
+      run: |
+        cd client
+        npx eslint src --ext .js,.jsx
+        
+    - name: Run backend tests
+      run: npm test
+      env:
+        NODE_ENV: test
+        
+    - name: Run frontend tests
+      run: |
+        cd client
+        CI=true npm test -- --coverage --watchAll=false
+        
+    - name: Build frontend application
+      run: |
+        cd client
+        npm run build
+        
+    - name: Verify backend can start
+      run: |
+        timeout 10s npm start || exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+          echo "✅ Server started successfully (timed out as expected)"
+          exit 0
+        elif [ $exit_code -eq 0 ]; then
+          echo "✅ Server started and stopped successfully"
+          exit 0
+        else
+          echo "❌ Server failed to start"
+          exit 1
+        fi
+      env:
+        NODE_ENV: test
+        PORT: 3001 
