@@ -27,9 +27,6 @@ RUN npm install
 # Copy all frontend files (ensuring all necessary files are included)
 COPY client/ .
 
-# Verify required files exist
-RUN ls -la public/ && ls -la src/
-
 # Build frontend for production
 RUN npm run build
 
