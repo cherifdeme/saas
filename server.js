@@ -83,10 +83,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  const path = require('path');
-  app.use(express.static(path.join(__dirname, 'client/build')));
+// Serve static files if build directory exists
+const path = require('path');
+const fs = require('fs');
+const buildPath = path.join(__dirname, 'client/build');
+
+if (fs.existsSync(buildPath)) {
+  console.log('📁 Serving static files from:', buildPath);
+  app.use(express.static(buildPath));
   
   // Catch all handler: send back React's index.html file for any non-API routes
   app.get('*', (req, res) => {
@@ -94,8 +98,16 @@ if (process.env.NODE_ENV === 'production') {
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ message: 'API endpoint non trouvé' });
     }
-    res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
+    
+    const indexPath = path.resolve(__dirname, 'client', 'build', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ message: 'Application frontend non trouvée' });
+    }
   });
+} else {
+  console.log('⚠️ Build directory not found, serving API only');
 }
 
 // Error handling middleware
@@ -107,12 +119,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler for development or if production static files fail
-if (process.env.NODE_ENV !== 'production') {
-  app.use('*', (req, res) => {
-    res.status(404).json({ message: 'Endpoint non trouvé' });
-  });
-}
+// 404 handler - only for API routes not caught above
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ message: 'API endpoint non trouvé' });
+});
 
 // Socket.IO connection handling
 handleConnection(io);
