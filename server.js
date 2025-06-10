@@ -88,7 +88,12 @@ if (process.env.NODE_ENV === 'production') {
   const path = require('path');
   app.use(express.static(path.join(__dirname, 'client/build')));
   
+  // Catch all handler: send back React's index.html file for any non-API routes
   app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ message: 'API endpoint non trouvé' });
+    }
     res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
   });
 }
@@ -102,10 +107,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ message: 'Endpoint non trouvé' });
-});
+// 404 handler for development or if production static files fail
+if (process.env.NODE_ENV !== 'production') {
+  app.use('*', (req, res) => {
+    res.status(404).json({ message: 'Endpoint non trouvé' });
+  });
+}
 
 // Socket.IO connection handling
 handleConnection(io);
@@ -125,7 +132,6 @@ const createTestUsers = async () => {
       if (!existingUser) {
         const user = new User(userData);
         await user.save();
-        console.log(`Utilisateur de test créé: ${userData.username}`);
       }
     }
   } catch (error) {
@@ -145,7 +151,6 @@ server.listen(PORT, () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('Signal SIGTERM reçu. Arrêt gracieux du serveur...');
   server.close(() => {
     console.log('Serveur fermé.');
     process.exit(0);

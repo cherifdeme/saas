@@ -18,17 +18,20 @@ RUN rm -rf client
 FROM node:18-alpine AS frontend-builder
 
 # Set working directory for frontend
-WORKDIR /app
+WORKDIR /app/client
 
 # Copy frontend package files first
-COPY client/package*.json ./client/
-RUN cd client && npm install
+COPY client/package*.json ./
+RUN npm install
 
-# Copy all frontend files 
-COPY client/ ./client/
+# Copy all frontend files (ensuring all necessary files are included)
+COPY client/ .
+
+# Verify required files exist
+RUN ls -la public/ && ls -la src/
 
 # Build frontend for production
-RUN cd client && npm run build
+RUN npm run build
 
 # Production stage
 FROM node:18-alpine AS production
