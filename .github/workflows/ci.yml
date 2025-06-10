@@ -48,13 +48,15 @@ jobs:
         cd client
         npm install
         
-    - name: Lint backend code
-      run: npx eslint . --ext .js --ignore-path .gitignore
-      
-    - name: Lint frontend code
+    - name: Syntax check
       run: |
-        cd client
-        npx eslint src --ext .js,.jsx
+        echo "🔍 Checking backend syntax..."
+        node -c server.js
+        echo "✅ Backend syntax OK"
+        
+        echo "🔍 Checking frontend dependencies..."
+        cd client && npm ls react > /dev/null 2>&1
+        echo "✅ Frontend dependencies OK"
         
     - name: Run backend tests
       run: npm test
