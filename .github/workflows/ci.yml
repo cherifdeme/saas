@@ -46,7 +46,7 @@ jobs:
     - name: Install frontend dependencies
       run: |
         cd client
-        npm ci
+        npm install
         
     - name: Lint backend code
       run: npx eslint . --ext .js --ignore-path .gitignore
