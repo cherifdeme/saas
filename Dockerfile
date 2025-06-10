@@ -20,14 +20,12 @@ FROM node:18-alpine AS frontend-builder
 # Set working directory for frontend
 WORKDIR /app/client
 
-# Copy frontend package files
+# Copy frontend package files first
 COPY client/package*.json ./
 RUN npm install
 
-# Copy all frontend source code  
-COPY client/public ./public
-COPY client/src ./src
-COPY client/postcss.config.js client/tailwind.config.js ./
+# Copy all frontend files (ensuring all necessary files are included)
+COPY client/ .
 
 # Build frontend for production
 RUN npm run build
