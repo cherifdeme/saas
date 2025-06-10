@@ -27,7 +27,17 @@ export function SocketProvider({ children }) {
   }, [isAuthenticated]);
 
   const connectSocket = () => {
-    const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+    // For production, use the current domain; for development, use the configured URL
+    let serverUrl = process.env.REACT_APP_SERVER_URL;
+    
+    if (!serverUrl) {
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        serverUrl = 'http://localhost:5000';
+      } else {
+        // In production, use the same origin as the web app
+        serverUrl = `${window.location.protocol}//${window.location.host}`;
+      }
+    }
     
     socketRef.current = io(serverUrl, {
       withCredentials: true,
@@ -35,7 +45,6 @@ export function SocketProvider({ children }) {
     });
 
     socketRef.current.on('connect', () => {
-      console.log('✅ Connecté au serveur WebSocket');
       setConnected(true);
       setSocket(socketRef.current);
       
@@ -44,16 +53,9 @@ export function SocketProvider({ children }) {
       const currentUserId = sessionStorage.getItem('currentUserId');
       const currentUsername = sessionStorage.getItem('currentUsername');
       
-      if (currentSessionId && currentUserId && currentUsername) {
-        console.log('🔄 Auto-rejoin session après reconnection:', {
-          sessionId: currentSessionId,
-          userId: currentUserId,
-          username: currentUsername
-        });
-        
+      if (currentSessionId && currentUserId && currentUsername) {       
         // Validation supplémentaire des données
         if (currentSessionId.length < 10 || currentUserId.length < 10) {
-          console.log('❌ Données de session corrompues, nettoyage...');
           sessionStorage.removeItem('currentSessionId');
           sessionStorage.removeItem('currentUserId');
           sessionStorage.removeItem('currentUsername');
@@ -62,10 +64,8 @@ export function SocketProvider({ children }) {
         
         setTimeout(() => {
           if (socketRef.current) {
-            console.log('🚪 Détection refresh : Sortie automatique de session:', currentSessionId);
             
             // Émettre leaveSession pour nettoyer côté serveur
-            console.log('📤 Émission leaveSession après refresh...');
             socketRef.current.emit('leaveSession', currentSessionId);
             
             // Nettoyer le sessionStorage
@@ -75,22 +75,16 @@ export function SocketProvider({ children }) {
             
             // Rediriger vers dashboard après un court délai
             setTimeout(() => {
-              console.log('🏠 Redirection vers dashboard après refresh...');
               window.location.href = '/dashboard';
             }, 100);
           }
         }, 200); // Delay to ensure socket is ready
       } else {
-        console.log('🔍 Données manquantes pour auto-rejoin:', {
-          hasSessionId: !!currentSessionId,
-          hasUserId: !!currentUserId,
-          hasUsername: !!currentUsername
-        });
+
       }
     });
 
     socketRef.current.on('disconnect', () => {
-      console.log('Déconnecté du serveur WebSocket');
       setConnected(false);
     });
 
@@ -106,7 +100,6 @@ export function SocketProvider({ children }) {
 
     // Global event handlers
     socketRef.current.on('connected', (data) => {
-      console.log('WebSocket authentifié:', data);
     });
 
     socketRef.current.on('leftSession', (data) => {
