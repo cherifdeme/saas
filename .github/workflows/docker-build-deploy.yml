@@ -1,0 +1,184 @@
+name: Docker Build & Deploy
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Create deployment package
+      run: |
+        mkdir -p deploy
+        cp docker-compose.yml deploy/
+        cp -r scripts deploy/
+        
+        # Créer un docker-compose de production
+        cat > deploy/docker-compose.prod.yml << 'EOF'
+        services:
+          mongodb:
+            image: mongo:7.0
+            container_name: planning-poker-mongodb-prod
+            restart: unless-stopped
+            environment:
+              MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+              MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+              MONGO_INITDB_DATABASE: planning-poker
+            ports:
+              - "27017:27017"
+            volumes:
+              - mongodb_prod_data:/data/db
+              - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+            networks:
+              - planning-poker-network
+
+          app:
+            image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            container_name: planning-poker-app-prod
+            restart: unless-stopped
+            environment:
+              NODE_ENV: production
+              PORT: 5000
+              MONGODB_URI: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/planning-poker?authSource=admin
+              JWT_SECRET: ${JWT_SECRET}
+              JWT_EXPIRES_IN: 7d
+              COOKIE_SECRET: ${COOKIE_SECRET}
+              CLIENT_URL: ${CLIENT_URL}
+            ports:
+              - "5000:5000"
+            depends_on:
+              - mongodb
+            networks:
+              - planning-poker-network
+            healthcheck:
+              test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+              start_period: 40s
+
+        volumes:
+          mongodb_prod_data:
+            driver: local
+
+        networks:
+          planning-poker-network:
+            driver: bridge
+        EOF
+        
+        # Créer un script de déploiement
+        cat > deploy/deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Déploiement Planning Poker..."
+        
+        # Pull de la dernière image
+        docker compose -f docker-compose.prod.yml pull app
+        
+        # Arrêt gracieux
+        docker compose -f docker-compose.prod.yml down --timeout 30
+        
+        # Démarrage avec la nouvelle image
+        docker compose -f docker-compose.prod.yml up -d
+        
+        # Vérification de santé
+        echo "⏳ Vérification de la santé de l'application..."
+        for i in {1..30}; do
+          if curl -f http://localhost:5000/api/health > /dev/null 2>&1; then
+            echo "✅ Application déployée avec succès!"
+            exit 0
+          fi
+          echo "Tentative $i/30..."
+          sleep 5
+        done
+        
+        echo "❌ Échec du déploiement - l'application ne répond pas"
+        docker compose -f docker-compose.prod.yml logs app
+        exit 1
+        EOF
+        
+        chmod +x deploy/deploy.sh
+
+    - name: Upload deployment package
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-package
+        path: deploy/
+        retention-days: 30
+
+    - name: Deployment summary
+      run: |
+        echo "## 🚀 Déploiement Prêt" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Images construites:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry:** ${{ env.REGISTRY }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image:** ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Instructions de déploiement:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Télécharger le package de déploiement" >> $GITHUB_STEP_SUMMARY
+        echo "2. Configurer les variables d'environnement:" >> $GITHUB_STEP_SUMMARY
+        echo "   - \`MONGO_USERNAME\`" >> $GITHUB_STEP_SUMMARY
+        echo "   - \`MONGO_PASSWORD\`" >> $GITHUB_STEP_SUMMARY
+        echo "   - \`JWT_SECRET\`" >> $GITHUB_STEP_SUMMARY
+        echo "   - \`COOKIE_SECRET\`" >> $GITHUB_STEP_SUMMARY
+        echo "   - \`CLIENT_URL\`" >> $GITHUB_STEP_SUMMARY
+        echo "3. Exécuter: \`./deploy.sh\`" >> $GITHUB_STEP_SUMMARY 
