@@ -29,7 +29,17 @@ const connectDB = async () => {
   } catch (error) {
     logger.error('❌ Erreur de connexion à MongoDB:', error);
     
-    // En développement, donner des conseils
+    // 🔧 MODE CI/TEST : Ne pas arrêter le serveur si MongoDB n'est pas disponible
+    if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
+      logger.info('💡 Pour démarrer MongoDB localement:', {
+        docker: 'docker run -d -p 27017:27017 --name mongodb mongo:7.0',
+        message: 'Ou installez MongoDB localement'
+      });
+      logger.warn('⚠️ Mode CI/Test: Serveur démarré sans MongoDB');
+      return; // Continue sans MongoDB en mode test
+    }
+    
+    // En développement, donner des conseils mais arrêter
     if (process.env.NODE_ENV !== 'production') {
       logger.info('💡 Pour démarrer MongoDB localement:', {
         docker: 'docker run -d -p 27017:27017 --name mongodb mongo:7.0',

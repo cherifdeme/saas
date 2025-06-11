@@ -155,6 +155,16 @@ handleConnection(io);
 
 // Create test users
 const createTestUsers = async () => {
+  // 🔧 MODE CI/TEST : Ne pas créer d'utilisateurs si MongoDB n'est pas disponible
+  if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
+    // Vérifier si MongoDB est connecté
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      logger.info('⚠️ Mode CI/Test: Création d\'utilisateurs ignorée (MongoDB non disponible)');
+      return;
+    }
+  }
+
   try {
     const testUsers = [
       { username: 'AmySy', passwordHash: 'test1234' },
@@ -172,7 +182,12 @@ const createTestUsers = async () => {
     }
     logger.info('Utilisateurs de test initialisés.');
   } catch (error) {
-    logger.error('Erreur lors de la création des utilisateurs de test', error);
+    // En mode test, ne pas faire échouer le serveur pour les erreurs MongoDB
+    if (process.env.NODE_ENV === 'test' || process.env.CI === 'true') {
+      logger.warn('⚠️ Mode CI/Test: Erreur lors de la création des utilisateurs de test (ignorée)', error.message);
+    } else {
+      logger.error('Erreur lors de la création des utilisateurs de test', error);
+    }
   }
 };
 
