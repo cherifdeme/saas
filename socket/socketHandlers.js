@@ -1,6 +1,8 @@
 const Session = require('../models/Session');
 const { verifyToken } = require('../utils/jwt');
 const User = require('../models/User');
+const connectionManager = require('../services/connectionManager');
+const logger = require('../utils/logger');
 
 // Track online users per session
 const sessionConnections = new Map(); // sessionId -> Set of userIds
@@ -21,10 +23,9 @@ const cleanupUserFromSession = async (sessionId, userId) => {
         p => p.toString() !== userId
       );
       await session.save();
-      console.log(`Cleaned up user ${userId} from session ${sessionId} participants list`);
     }
   } catch (error) {
-    console.error('Error cleaning up user from session:', error);
+    logger.error('Error cleaning up user from session', error);
   }
 };
 
@@ -101,10 +102,9 @@ const getConnectedUsersInSession = async (io, sessionId) => {
       }
     }
     
-    console.log(`Utilisateurs trouvés dans la room session-${sessionId}:`, connectedUsers.map(u => u.username));
     return connectedUsers;
   } catch (error) {
-    console.error('Erreur lors de la récupération des utilisateurs connectés:', error);
+    logger.error('Erreur lors de la récupération des utilisateurs connectés', error);
     return [];
   }
 };
@@ -121,7 +121,6 @@ const syncSessionConnections = async (io, sessionId) => {
     sessionConnections.delete(sessionId);
   }
   
-  console.log(`Session ${sessionId} synchronized: ${actualUserIds.length} users`);
   return actualUserIds;
 };
 
@@ -129,10 +128,15 @@ const handleConnection = (io) => {
   io.use(socketAuth);
 
   io.on('connection', (socket) => {
-    console.log(`Utilisateur connecté: ${socket.username} (${socket.userId})`);
+    // 🔐 SÉCURITÉ: Synchroniser avec le gestionnaire de connexions
+    connectionManager.updateSocketId(socket.username, socket.id);
+    connectionManager.updateActivity(socket.username);
 
     // Join user to their personal room
     socket.join(`user-${socket.userId}`);
+
+    // Log de connexion WebSocket (propre)
+    logger.info(`WebSocket connecté pour "${socket.username}".`);
 
     // Handle joining a session room
     // Handler for regular session join
@@ -183,7 +187,6 @@ const handleConnection = (io) => {
           sessionConnections.set(sessionId, new Set(userIds));
         }
 
-        console.log(`${socket.username} a rejoint la session ${sessionId}. Utilisateurs connectés:`, connectedUsersInfo);
 
         // Step 1: Send current state to the joining user first
         socket.emit('sessionUsers', {
@@ -220,7 +223,7 @@ const handleConnection = (io) => {
           users: connectedUsersInfo
         });
       } catch (error) {
-        console.error('Erreur lors de la jointure de session:', error);
+        logger.error('Erreur lors de la jointure de session', error);
         socket.emit('error', { message: 'Erreur lors de la jointure de session' });
               }
     });
@@ -228,38 +231,30 @@ const handleConnection = (io) => {
     // Handler for session rejoin (after page refresh)
     socket.on('rejoinSession', async (data) => {
         try {
-            console.log('🔄 Tentative de rejoin avec données:', data);
             
             const { sessionId, userId, username, reconnect } = data;
             
             // Validation des données reçues
             if (!sessionId || !userId || !username) {
-                console.log('❌ Données manquantes pour rejoin:', { sessionId, userId, username });
                 socket.emit('error', { message: 'Données de session manquantes' });
                 return;
             }
             
-            console.log(`🔄 ${username} rejoint la session ${sessionId} après refresh`);
             
             // Verify session still exists
             const session = await Session.findById(sessionId);
             if (!session) {
-                console.log(`❌ Session ${sessionId} not found for rejoin`);
                 socket.emit('sessionNotFound', { sessionId });
                 return;
             }
             
-            console.log(`✅ Session ${sessionId} trouvée:`, {
-                admin: session.admin,
-                participantsCount: session.participants.length
-            });
+
             
             // Verify user is still part of the session
             const isParticipant = session.participants.some(p => p.toString() === userId);
             const isAdmin = session.admin && session.admin.toString() === userId;
             
             if (!isParticipant && !isAdmin) {
-                console.log(`❌ User ${username} not authorized for session ${sessionId}`);
                 socket.emit('sessionNotAuthorized', { sessionId });
                 return;
             }
@@ -291,11 +286,7 @@ const handleConnection = (io) => {
             const connectedUsersInfo = await getConnectedUsersInSession(sessionId);
             const userIds = connectedUsersInfo.map(u => u.userId);
             
-            console.log(`✅ ${username} reconnecté à la session ${sessionId}:`, {
-                userCount: userIds.length,
-                users: userIds,
-                isAdmin: isAdmin
-            });
+
             
             // Step 1: Send current state to the rejoining user
             socket.emit('sessionUsers', {
@@ -329,10 +320,9 @@ const handleConnection = (io) => {
             });
             
         } catch (error) {
-            console.error('❌ Erreur détaillée dans rejoinSession:', {
-                error: error.message,
-                stack: error.stack,
-                data: data
+            logger.error('Erreur dans rejoinSession', error, { 
+                data: data,
+                socketId: socket.id 
             });
             
             // Envoyer une erreur plus spécifique selon le type
@@ -348,7 +338,6 @@ const handleConnection = (io) => {
 
     // Handle leaving a session room
     socket.on('leaveSession', async (sessionId) => {
-      console.log(`🚪 ${socket.username} quitte la session ${sessionId} (sortie ou refresh)`);
       
       socket.leave(`session-${sessionId}`);
       
@@ -386,7 +375,6 @@ const handleConnection = (io) => {
         socket.currentSessionId = null;
       }
 
-      console.log(`✅ ${socket.username} a quitté la session ${sessionId} (${remainingUserIds.length} utilisateurs connectés)`);
       
       // Confirmer la sortie au client
       socket.emit('leftSession', { sessionId, success: true });
@@ -428,9 +416,8 @@ const handleConnection = (io) => {
           adminUsername: socket.username
         });
 
-        console.log(`Action admin ${action} exécutée par ${socket.username} dans la session ${sessionId}`);
       } catch (error) {
-        console.error('Erreur lors de l\'action admin:', error);
+        logger.error('Erreur lors de l\'action admin', error);
         socket.emit('error', { message: 'Erreur lors de l\'action admin' });
       }
     });
@@ -455,7 +442,6 @@ const handleConnection = (io) => {
     // Handle presence sync requests
     socket.on('requestPresenceSync', async (sessionId) => {
       try {
-        console.log(`🔄 Synchronisation de présence demandée par ${socket.username} pour la session ${sessionId}`);
         
         // Get real-time connected users
         const connectedUsersInfo = await getConnectedUsersInSession(io, sessionId);
@@ -484,18 +470,18 @@ const handleConnection = (io) => {
           syncType: 'presenceSync'
         });
 
-        console.log(`✅ Synchronisation terminée pour la session ${sessionId}:`, {
-          userCount: userIds.length,
-          users: connectedUsersInfo.map(u => u.username)
-        });
       } catch (error) {
-        console.error('Erreur lors de la synchronisation de présence:', error);
+        logger.error('Erreur lors de la synchronisation de présence', error);
       }
     });
 
     // Handle disconnection
     socket.on('disconnect', async () => {
-      console.log(`Utilisateur déconnecté: ${socket.username} (${socket.userId})`);
+      // 🔐 SÉCURITÉ: Supprimer du gestionnaire de connexions
+      connectionManager.removeConnectionBySocketId(socket.id);
+      
+      // Log de déconnexion WebSocket (propre)
+      logger.info(`WebSocket déconnecté pour "${socket.username}".`);
       
       // Notify session participants if user was in a session
       if (socket.currentSessionId) {
@@ -527,8 +513,6 @@ const handleConnection = (io) => {
           sessionId: socket.currentSessionId,
           participantCount: userCount
         });
-
-        console.log(`${socket.username} déconnecté de la session ${socket.currentSessionId} (${remainingUserIds.length} utilisateurs restants)`);
       }
     });
 

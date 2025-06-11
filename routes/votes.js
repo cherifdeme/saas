@@ -4,6 +4,7 @@ const Session = require('../models/Session');
 const Vote = require('../models/Vote');
 const { authenticate } = require('../middleware/auth');
 const { hasPermission } = require('../config/roles');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -78,7 +79,7 @@ router.post('/:sessionId', authenticate, async (req, res) => {
 
     res.json({ message: 'Vote enregistré avec succès', vote });
   } catch (error) {
-    console.error('Erreur lors de l\'enregistrement du vote:', error);
+    logger.error('Erreur lors de l\'enregistrement du vote', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -130,7 +131,7 @@ router.post('/:sessionId/reveal', authenticate, async (req, res) => {
 
     res.json({ message: 'Votes révélés avec succès', votes, stats });
   } catch (error) {
-    console.error('Erreur lors de la révélation des votes:', error);
+    logger.error('Erreur lors de la révélation des votes', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -169,7 +170,7 @@ router.post('/:sessionId/reset', authenticate, async (req, res) => {
 
     res.json({ message: 'Votes réinitialisés avec succès' });
   } catch (error) {
-    console.error('Erreur lors de la réinitialisation des votes:', error);
+    logger.error('Erreur lors de la réinitialisation des votes', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -213,7 +214,7 @@ router.get('/:sessionId', authenticate, async (req, res) => {
       res.json({ votes: voteStatus, revealed: false });
     }
   } catch (error) {
-    console.error('Erreur lors de la récupération des votes:', error);
+    logger.error('Erreur lors de la récupération des votes', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });

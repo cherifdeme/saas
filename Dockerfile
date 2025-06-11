@@ -53,9 +53,14 @@ COPY --from=backend-builder --chown=nodejs:nodejs /app/routes ./routes
 COPY --from=backend-builder --chown=nodejs:nodejs /app/middleware ./middleware
 COPY --from=backend-builder --chown=nodejs:nodejs /app/socket ./socket
 COPY --from=backend-builder --chown=nodejs:nodejs /app/utils ./utils
+COPY --from=backend-builder --chown=nodejs:nodejs /app/services ./services
+COPY --from=backend-builder --chown=nodejs:nodejs /app/validators ./validators
 
 # Copy built frontend
 COPY --from=frontend-builder --chown=nodejs:nodejs /app/client/build ./client/build
+
+# Create logs directory with proper permissions
+RUN mkdir -p logs && chown -R nodejs:nodejs logs
 
 # Switch to non-root user
 USER nodejs

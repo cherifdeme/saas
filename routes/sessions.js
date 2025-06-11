@@ -4,6 +4,7 @@ const Session = require('../models/Session');
 const Vote = require('../models/Vote');
 const { authenticate } = require('../middleware/auth');
 const { hasPermission } = require('../config/roles');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -36,7 +37,7 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json(sessions);
   } catch (error) {
-    console.error('Erreur lors de la récupération des sessions:', error);
+    logger.error('Erreur lors de la récupération des sessions', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -77,7 +78,7 @@ router.get('/:id', authenticate, async (req, res) => {
       userRole: isCreator ? 'admin' : 'participant'
     });
   } catch (error) {
-    console.error('Erreur lors de la récupération de la session:', error);
+    logger.error('Erreur lors de la récupération de la session', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -106,9 +107,12 @@ router.post('/', authenticate, async (req, res) => {
     // Emit to all connected clients
     req.io.emit('sessionCreated', session);
 
+    // Log de création de session
+    logger.sessionCreated(session._id.toString(), req.user.username);
+
     res.status(201).json(session);
   } catch (error) {
-    console.error('Erreur lors de la création de la session:', error);
+    logger.error('Erreur lors de la création de la session', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -142,7 +146,7 @@ router.post('/:id/join', authenticate, async (req, res) => {
 
     res.json({ message: 'Vous avez rejoint la session', session });
   } catch (error) {
-    console.error('Erreur lors de la participation à la session:', error);
+    logger.error('Erreur lors de la participation à la session', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -184,7 +188,7 @@ router.post('/:id/leave', authenticate, async (req, res) => {
 
     res.json({ message: 'Vous avez quitté la session', session });
   } catch (error) {
-    console.error('Erreur lors de la sortie de session:', error);
+    logger.error('Erreur lors de la sortie de session', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -232,9 +236,12 @@ router.delete('/:id', authenticate, async (req, res) => {
     // Emit to all clients pour mettre à jour les listes de sessions
     req.io.emit('sessionDeleted', { sessionId: session._id });
 
+    // Log de suppression de session
+    logger.sessionDeleted(session._id.toString(), req.user.username);
+
     res.json({ message: 'Session supprimée avec succès' });
   } catch (error) {
-    console.error('Erreur lors de la suppression de la session:', error);
+    logger.error('Erreur lors de la suppression de la session', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });
@@ -272,7 +279,7 @@ router.put('/:id/ticket', authenticate, async (req, res) => {
 
     res.json({ message: 'Ticket mis à jour', ticket: session.currentTicket });
   } catch (error) {
-    console.error('Erreur lors de la mise à jour du ticket:', error);
+    logger.error('Erreur lors de la mise à jour du ticket', error);
     res.status(500).json({ message: 'Erreur interne du serveur' });
   }
 });

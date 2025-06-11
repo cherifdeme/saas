@@ -1,0 +1,48 @@
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 22:41:41"}
+{"environment":"development","level":"info","message":"🚀 Serveur démarré sur le port 5000","port":"5000","timestamp":"2025-06-11 22:41:41"}
+{"body":{"password":"********","username":"AmySy"},"ip":"::1","level":"info","message":"Requête reçue: POST /api/auth/login","query":{},"timestamp":"2025-06-11 22:41:48","url":"/api/auth/login"}
+{"error":{"message":"Operation `users.findOne()` buffering timed out after 10000ms","name":"MongooseError","stack":"MongooseError: Operation `users.findOne()` buffering timed out after 10000ms\n    at Timeout.<anonymous> (E:\\planning-pocker\\node_modules\\mongoose\\lib\\drivers\\node-mongodb-native\\collection.js:185:23)\n    at listOnTimeout (node:internal/timers:594:17)\n    at process.processTimers (node:internal/timers:529:7)"},"level":"error","message":"Erreur lors de la création des utilisateurs de test","timestamp":"2025-06-11 22:41:51"}
+{"error":{},"level":"error","message":"Erreur lors de la connexion","timestamp":"2025-06-11 22:41:58"}
+{"duration":"10010ms","level":"info","message":"Requête terminée: POST /login","statusCode":500,"timestamp":"2025-06-11 22:41:58"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 22:49:23"}
+{"environment":"development","level":"info","message":"🚀 Serveur démarré sur le port 5000","port":"5000","timestamp":"2025-06-11 22:49:23"}
+{"error":{"message":"Command find requires authentication","name":"MongoServerError","stack":"MongoServerError: Command find requires authentication\n    at Connection.onMessage (E:\\planning-pocker\\node_modules\\mongodb\\lib\\cmap\\connection.js:202:26)\n    at MessageStream.<anonymous> (E:\\planning-pocker\\node_modules\\mongodb\\lib\\cmap\\connection.js:61:60)\n    at MessageStream.emit (node:events:518:28)\n    at processIncomingData (E:\\planning-pocker\\node_modules\\mongodb\\lib\\cmap\\message_stream.js:124:16)\n    at MessageStream._write (E:\\planning-pocker\\node_modules\\mongodb\\lib\\cmap\\message_stream.js:33:9)\n    at writeOrBuffer (node:internal/streams/writable:572:12)\n    at _write (node:internal/streams/writable:501:10)\n    at Writable.write (node:internal/streams/writable:510:10)\n    at Socket.ondata (node:internal/streams/readable:1009:22)\n    at Socket.emit (node:events:518:28)"},"level":"error","message":"Erreur lors de la création des utilisateurs de test","timestamp":"2025-06-11 22:49:23"}
+{"body":{"password":"********","username":"AmySy"},"ip":"::1","level":"info","message":"Requête reçue: POST /api/auth/login","query":{},"timestamp":"2025-06-11 22:49:39","url":"/api/auth/login"}
+{"error":{"code":13,"codeName":"Unauthorized","ok":0},"level":"error","message":"Erreur lors de la connexion","timestamp":"2025-06-11 22:49:39"}
+{"duration":"8ms","level":"info","message":"Requête terminée: POST /login","statusCode":500,"timestamp":"2025-06-11 22:49:39"}
+{"body":{"password":"********","username":"AmySy"},"ip":"::1","level":"info","message":"Requête reçue: POST /api/auth/login","query":{},"timestamp":"2025-06-11 22:50:24","url":"/api/auth/login"}
+{"ip":"::1","level":"warn","message":"Tentative de connexion avec utilisateur inexistant","timestamp":"2025-06-11 22:50:24","username":"AmySy"}
+{"duration":"11ms","level":"info","message":"Requête terminée: POST /login","statusCode":401,"timestamp":"2025-06-11 22:50:24"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:12:35"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:16:30"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:16:43"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:17:39"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:17:41"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:17:54"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:05"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:14"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:21"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:28"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:33"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:41"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:53"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:18:53"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:01"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:01"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:03"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:03"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:15"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:28"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:28"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:30"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:30"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:56"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:19:56"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:20:10"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:20:10"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:20:54"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:21:13"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:21:32"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:21:53"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:22:00"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-11 23:22:05"}

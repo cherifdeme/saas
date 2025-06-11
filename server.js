@@ -19,6 +19,11 @@ const voteRoutes = require('./routes/votes');
 // Import models for test users
 const User = require('./models/User');
 
+// Import security middlewares
+const { sanitizeLoggingMiddleware, secureRequestLogging } = require('./middleware/sanitizeLogging');
+const connectionManager = require('./services/connectionManager');
+const logger = require('./utils/logger');
+
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
@@ -76,6 +81,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// 🔐 SÉCURITÉ: Middlewares de sécurité et logging
+app.use(sanitizeLoggingMiddleware);
+app.use(secureRequestLogging);
+
 // Make io accessible to routes
 app.use((req, res, next) => {
   req.io = io;
@@ -102,7 +111,7 @@ const fs = require('fs');
 const buildPath = path.join(__dirname, 'client/build');
 
 if (fs.existsSync(buildPath)) {
-  console.log('📁 Serving static files from:', buildPath);
+  logger.info('📁 Serving static files from:', { buildPath });
   app.use(express.static(buildPath));
   
   // Catch all handler: send back React's index.html file for any non-API routes
@@ -120,12 +129,16 @@ if (fs.existsSync(buildPath)) {
     }
   });
 } else {
-  console.log('⚠️ Build directory not found, serving API only');
+  logger.warn('⚠️ Build directory not found, serving API only');
 }
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Erreur non gérée:', err.stack);
+  logger.error('Erreur non gérée', err, { 
+    url: req.url,
+    method: req.method,
+    ip: req.ip 
+  });
   res.status(500).json({ 
     message: 'Erreur interne du serveur',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
@@ -157,16 +170,16 @@ const createTestUsers = async () => {
         await user.save();
       }
     }
+    logger.info('Utilisateurs de test initialisés.');
   } catch (error) {
-    console.error('Erreur lors de la création des utilisateurs de test:', error);
+    logger.error('Erreur lors de la création des utilisateurs de test', error);
   }
 };
 
 // Start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-  console.log(`🌍 Environnement: ${process.env.NODE_ENV || 'development'}`);
+  logger.serverStarted(PORT, process.env.NODE_ENV || 'development');
   
   // Create test users after server starts
   createTestUsers();
@@ -175,7 +188,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   server.close(() => {
-    console.log('Serveur fermé.');
+    logger.serverStopped();
     process.exit(0);
   });
 });

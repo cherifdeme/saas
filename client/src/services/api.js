@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { prepareSecureCredentials, sanitizeForLogging } from '../utils/crypto';
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -8,6 +9,24 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Request interceptor for logging (sans mots de passe)
+api.interceptors.request.use(
+  (config) => {
+    // Logger la requête de manière sécurisée
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔐 Requête API:', {
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        data: sanitizeForLogging(config.data)
+      });
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Response interceptor for error handling
 api.interceptors.response.use(
@@ -22,10 +41,20 @@ api.interceptors.response.use(
   }
 );
 
-// Auth service
+// Auth service avec chiffrement automatique
 export const authService = {
-  login: (credentials) => api.post('/auth/login', credentials),
-  register: (userData) => api.post('/auth/register', userData),
+  // 🔐 SÉCURITÉ : Login avec chiffrement côté client
+  login: async (credentials) => {
+    const secureCredentials = await prepareSecureCredentials(credentials);
+    return api.post('/auth/login', secureCredentials);
+  },
+  
+  // 🔐 SÉCURITÉ : Register avec chiffrement côté client  
+  register: async (userData) => {
+    const secureUserData = await prepareSecureCredentials(userData);
+    return api.post('/auth/register', secureUserData);
+  },
+  
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
 };
