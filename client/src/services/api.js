@@ -10,6 +10,21 @@ const api = axios.create({
   },
 });
 
+// 🔐 UTILISATEURS DE TEST : Liste des comptes de démonstration
+const TEST_USERS = ['AmySy', 'JonDoe', 'AdminTest', 'ScrumMaster'];
+
+// 🔐 FONCTION DE COMPATIBILITÉ : Détermine si on doit utiliser le chiffrement
+const shouldUseClientEncryption = (username) => {
+  // Désactiver le chiffrement pour les utilisateurs de test
+  if (TEST_USERS.includes(username)) {
+    console.log(`🔓 Mode compatibilité activé pour l'utilisateur de test: ${username}`);
+    return false;
+  }
+  
+  // Activer le chiffrement pour tous les nouveaux utilisateurs
+  return true;
+};
+
 // Request interceptor for logging (sans mots de passe)
 api.interceptors.request.use(
   (config) => {
@@ -43,16 +58,37 @@ api.interceptors.response.use(
 
 // Auth service avec chiffrement automatique
 export const authService = {
-  // 🔐 SÉCURITÉ : Login avec chiffrement côté client
+  // 🔐 SÉCURITÉ : Login avec chiffrement côté client intelligent
   login: async (credentials) => {
-    const secureCredentials = await prepareSecureCredentials(credentials);
-    return api.post('/auth/login', secureCredentials);
+    const useEncryption = shouldUseClientEncryption(credentials.username);
+    
+    if (useEncryption) {
+      // Nouveau système : chiffrement côté client
+      const secureCredentials = await prepareSecureCredentials(credentials);
+      return api.post('/auth/login', secureCredentials);
+    } else {
+      // Mode compatibilité : envoi direct pour les utilisateurs de test
+      console.log('🔓 Connexion en mode compatibilité (sans chiffrement côté client)');
+      return api.post('/auth/login', {
+        username: credentials.username,
+        password: credentials.password // Envoi direct pour les utilisateurs de test
+      });
+    }
   },
   
-  // 🔐 SÉCURITÉ : Register avec chiffrement côté client  
+  // 🔐 SÉCURITÉ : Register avec chiffrement côté client intelligent  
   register: async (userData) => {
-    const secureUserData = await prepareSecureCredentials(userData);
-    return api.post('/auth/register', secureUserData);
+    const useEncryption = shouldUseClientEncryption(userData.username);
+    
+    if (useEncryption) {
+      // Nouveau système : chiffrement côté client
+      const secureUserData = await prepareSecureCredentials(userData);
+      return api.post('/auth/register', secureUserData);
+    } else {
+      // Mode compatibilité : envoi direct (rare, mais possible)
+      console.log('🔓 Inscription en mode compatibilité (sans chiffrement côté client)');
+      return api.post('/auth/register', userData);
+    }
   },
   
   logout: () => api.post('/auth/logout'),

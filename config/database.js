@@ -1,15 +1,42 @@
 const mongoose = require('mongoose');
+const logger = require('../utils/logger');
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/planning-poker', {
+    // Configuration différente selon l'environnement
+    let mongoURI;
+    
+    if (process.env.NODE_ENV === 'production') {
+      // Production avec authentification
+      mongoURI = process.env.MONGODB_URI || 'mongodb://admin:password123@localhost:27017/planning-poker?authSource=admin';
+    } else {
+      // Développement sans authentification
+      mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/planning-poker';
+    }
+
+    const conn = await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // Timeout après 5 secondes
+      socketTimeoutMS: 45000, // Close sockets après 45 secondes d'inactivité
     });
 
-    console.log(`MongoDB connecté: ${conn.connection.host}`);
+    logger.info(`✅ MongoDB connecté: ${conn.connection.host}`, {
+      database: conn.connection.name,
+      environment: process.env.NODE_ENV || 'development'
+    });
+    
   } catch (error) {
-    console.error('Erreur de connexion à MongoDB:', error.message);
+    logger.error('❌ Erreur de connexion à MongoDB:', error);
+    
+    // En développement, donner des conseils
+    if (process.env.NODE_ENV !== 'production') {
+      logger.info('💡 Pour démarrer MongoDB localement:', {
+        docker: 'docker run -d -p 27017:27017 --name mongodb mongo:7.0',
+        message: 'Ou installez MongoDB localement'
+      });
+    }
+    
     process.exit(1);
   }
 };
