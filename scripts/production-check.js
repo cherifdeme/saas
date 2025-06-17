@@ -48,7 +48,6 @@ class ProductionChecker {
    * Vérifie la configuration des variables d'environnement
    */
   checkEnvironmentConfig() {
-    console.log('\n🔧 Vérification de la configuration...');
     
     this.checkFileExists('example.env', 'Fichier exemple d\'environnement backend');
     this.checkFileExists('client/example.env', 'Fichier exemple d\'environnement frontend');
@@ -68,7 +67,6 @@ class ProductionChecker {
    * Vérifie la structure des dossiers
    */
   checkProjectStructure() {
-    console.log('\n📁 Vérification de la structure du projet...');
     
     const requiredDirs = [
       'config',
@@ -157,7 +155,6 @@ class ProductionChecker {
    * Vérifie la sécurité
    */
   checkSecurity() {
-    console.log('\n🔒 Vérification de la sécurité...');
     
     // Vérifier la présence des middlewares de sécurité
     const securityMiddleware = [
@@ -190,7 +187,6 @@ class ProductionChecker {
    * Vérifie la documentation
    */
   checkDocumentation() {
-    console.log('\n📚 Vérification de la documentation...');
     
     const docFiles = [
       'README.md',
@@ -206,29 +202,19 @@ class ProductionChecker {
    * Affiche le rapport final
    */
   generateReport() {
-    console.log('\n' + '='.repeat(60));
-    console.log('📊 RAPPORT DE PRODUCTION READINESS');
-    console.log('='.repeat(60));
 
     const okChecks = this.checks.filter(c => c.status === 'ok').length;
     const warningChecks = this.checks.filter(c => c.status === 'warning').length;
     const errorChecks = this.checks.filter(c => c.status === 'error').length;
 
-    console.log(`\n✅ Vérifications réussies: ${okChecks}`);
-    console.log(`⚠️  Avertissements: ${warningChecks}`);
-    console.log(`❌ Erreurs: ${errorChecks}`);
 
     if (this.warnings.length > 0) {
-      console.log('\n⚠️  AVERTISSEMENTS:');
       this.warnings.forEach(warning => console.log(`  ${warning}`));
     }
 
     if (this.errors.length > 0) {
-      console.log('\n❌ ERREURS:');
       this.errors.forEach(error => console.log(`  ${error}`));
     }
-
-    console.log('\n' + '='.repeat(60));
 
     if (errorChecks === 0) {
       console.log('🎉 APPLICATION PRÊTE POUR LA PRODUCTION!');

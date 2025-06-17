@@ -65,3 +65,9 @@
 {"database":"planning-poker","environment":"development","level":"info","message":"✅ MongoDB connecté: localhost","timestamp":"2025-06-12 00:13:12"}
 {"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-12 00:13:31"}
 {"database":"planning-poker","environment":"development","level":"info","message":"✅ MongoDB connecté: localhost","timestamp":"2025-06-12 00:13:31"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-17 20:10:00"}
+{"database":"planning-poker","environment":"development","level":"info","message":"✅ MongoDB connecté: localhost","timestamp":"2025-06-17 20:10:00"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-17 20:11:22"}
+{"database":"planning-poker","environment":"development","level":"info","message":"✅ MongoDB connecté: localhost","timestamp":"2025-06-17 20:11:22"}
+{"buildPath":"E:\\planning-pocker\\client\\build","level":"info","message":"📁 Serving static files from:","timestamp":"2025-06-17 20:11:27"}
+{"database":"planning-poker","environment":"development","level":"info","message":"✅ MongoDB connecté: localhost","timestamp":"2025-06-17 20:11:27"}

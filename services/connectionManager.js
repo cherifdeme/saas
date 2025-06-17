@@ -119,11 +119,12 @@ class ConnectionManager {
   }
 
   /**
-   * Nettoie les connexions inactives (plus de 30 minutes)
+   * Nettoie les connexions inactives (plus de 50 minutes)
+   * 🕒 TOLÉRANCE ÉTENDUE: Permet discussions longues avant vote
    */
   cleanupInactiveConnections() {
     const now = new Date();
-    const timeout = 30 * 60 * 1000; // 30 minutes en millisecondes
+    const timeout = 50 * 60 * 1000; // 50 minutes en millisecondes
 
     for (const [username, connection] of this.activeConnections.entries()) {
       if (now - connection.lastActivity > timeout) {
@@ -167,9 +168,9 @@ class ConnectionManager {
 // Instance singleton
 const connectionManager = new ConnectionManager();
 
-// Nettoyage automatique toutes les 10 minutes
+// 🕒 Nettoyage automatique toutes les 15 minutes (plus tolérant)
 setInterval(() => {
   connectionManager.cleanupInactiveConnections();
-}, 10 * 60 * 1000);
+}, 15 * 60 * 1000);
 
 module.exports = connectionManager; 

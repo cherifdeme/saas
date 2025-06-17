@@ -41,7 +41,13 @@ export function SocketProvider({ children }) {
     
     socketRef.current = io(serverUrl, {
       withCredentials: true,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      // 🕒 TOLÉRANCE ÉTENDUE: Configuration client pour 50 minutes d'inactivité
+      timeout: 3000000,           // 50 minutes
+      forceNew: false,            // Réutiliser la connexion existante si possible
+      reconnection: true,         // Reconnexion automatique
+      reconnectionAttempts: 5,    // Nombre de tentatives
+      reconnectionDelay: 1000     // Délai initial de reconnexion
     });
 
     socketRef.current.on('connect', () => {

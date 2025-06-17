@@ -147,9 +147,7 @@ Valider que les utilisateurs peuvent automatiquement se reconnecter à leur sess
 ### Vérifier le Storage
 ```javascript
 // Dans la console du navigateur
-console.log('Session ID:', sessionStorage.getItem('currentSessionId'));
-console.log('User ID:', sessionStorage.getItem('currentUserId'));
-console.log('Username:', sessionStorage.getItem('currentUsername'));
+
 ```
 
 ### Simuler une Session Expirée

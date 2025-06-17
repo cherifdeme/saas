@@ -16,6 +16,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
+import VoteDistributionChart from '../components/VoteDistributionChart';
 
 const POKER_CARDS = ['1', '2', '3', '5', '8', '13', '21', '40', '∞', '?'];
 
@@ -112,7 +113,6 @@ function SessionPage() {
       // Si nous sommes dans une session, faire le ménage
       const currentSessionId = sessionStorage.getItem('currentSessionId');
       if (currentSessionId && id) {
-        console.log('🚪 Beforeunload: Nettoyage session avant fermeture/refresh');
         
         // Émettre leaveSession de manière synchrone
         if (socket) {
@@ -143,7 +143,6 @@ function SessionPage() {
     
     // Request presence sync after a short delay to ensure connection is established
     const syncTimer = setTimeout(() => {
-      console.log('🔄 Requesting initial presence sync...');
       requestPresenceSync(id);
     }, 500);  // Reduced from 1000ms to 500ms for faster response
     
@@ -243,7 +242,6 @@ function SessionPage() {
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(data.user.id);
-        console.log('👋 User left:', data.user.username, 'Online users:', Array.from(newSet));
         return newSet;
       });
       
@@ -274,7 +272,6 @@ function SessionPage() {
     if (data.sessionId === id) {
       setOnlineUsers(prev => {
         const newSet = new Set([...prev, data.userId]);
-        console.log('✅ User connected:', data.username, 'Online users:', Array.from(newSet));
         return newSet;
       });
       // Show toast notification for other users connecting
@@ -292,7 +289,6 @@ function SessionPage() {
         newOnlineUsers.add(user.id);
       }
       setOnlineUsers(newOnlineUsers);
-      console.log('🔄 Updated online users from sessionUsers:', Array.from(newOnlineUsers));
       
       // Also update session.connectedUsers to ensure getActiveParticipants has the right data
       if (data.connectedUsers && Array.isArray(data.connectedUsers)) {
@@ -300,7 +296,6 @@ function SessionPage() {
           ...prev,
           connectedUsers: data.connectedUsers
         } : null);
-        console.log('🔄 Updated session.connectedUsers from sessionUsers:', data.connectedUsers);
       }
     }
   }, [id, user?.id]);
@@ -310,7 +305,6 @@ function SessionPage() {
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(data.userId);
-        console.log('🔌 User disconnected:', data.username, 'Online users:', Array.from(newSet));
         return newSet;
       });
       
@@ -349,13 +343,6 @@ function SessionPage() {
       
       setOnlineUsers(newOnlineUsers);
       
-      console.log('🔄 Participants updated from server:', {
-        sessionId: data.sessionId,
-        onlineUsers: data.onlineUsers,
-        participantCount: data.participantCount,
-        connectedUsers: data.connectedUsers,
-        newOnlineUsersSet: Array.from(newOnlineUsers)
-      });
       
       // Always update session data with connected users info
       setSession(prev => {
@@ -371,11 +358,6 @@ function SessionPage() {
 
   const handleJoinedSession = useCallback((data) => {
     if (data.sessionId === id) {
-      console.log('✅ Successfully joined session:', {
-        sessionId: data.sessionId,
-        userCount: data.userCount,
-        users: data.users
-      });
       
       // Update online users with the complete list from server
       if (data.onlineUsers && Array.isArray(data.onlineUsers)) {
@@ -385,7 +367,6 @@ function SessionPage() {
           newOnlineUsers.add(user.id);
         }
         setOnlineUsers(newOnlineUsers);
-        console.log('🔄 Updated online users from joinedSession:', Array.from(newOnlineUsers));
       } else {
         // Fallback: ensure current user is marked as online
         if (user?.id) {
@@ -399,7 +380,6 @@ function SessionPage() {
           ...prev,
           connectedUsers: data.connectedUsers
         } : null);
-        console.log('🔄 Updated session.connectedUsers from joinedSession:', data.connectedUsers);
       }
       
       // Force a presence sync to ensure we have the latest state
@@ -412,18 +392,11 @@ function SessionPage() {
   // Handler for successful rejoin after refresh
   const handleRejoinedSession = useCallback((data) => {
     if (data.sessionId === id) {
-      console.log('✅ Successfully rejoined session after refresh:', {
-        sessionId: data.sessionId,
-        userCount: data.userCount,
-        users: data.users,
-        isAdmin: data.isAdmin
-      });
       
       // Update online users
       if (data.users && data.users.length > 0) {
         const newOnlineUsers = new Set(data.users);
         setOnlineUsers(newOnlineUsers);
-        console.log('🔄 Updated online users from rejoinedSession:', Array.from(newOnlineUsers));
       }
       
       // Update session.connectedUsers
@@ -536,12 +509,6 @@ function SessionPage() {
     }
     
     const result = Array.from(participantsMap.values());
-    console.log('🔄 Active participants calculated:', {
-      sessionParticipants: baseParticipants.length,
-      connectedUsers: connectedUsersInfo.length,
-      onlineUsers: Array.from(onlineUsers),
-      finalList: result.map(p => ({ username: p.username, isOnline: p.isOnline, source: p.source }))
-    });
     
     return result;
   }, [session?.participants, session?.connectedUsers, onlineUsers, user]);
@@ -599,7 +566,6 @@ function SessionPage() {
         // Si l'erreur indique que l'utilisateur est le créateur, c'est normal
         // On continue la navigation mais on laisse la session active côté serveur
         if (apiError.response?.status === 400 && apiError.response?.data?.message?.includes('créateur')) {
-          console.log('Créateur navigant vers le dashboard - session reste active');
         } else {
           console.error('Erreur API lors du retour au dashboard:', apiError);
         }
@@ -868,6 +834,7 @@ function SessionPage() {
                   </h3>
                 </div>
                 <div className="card-body">
+                  {/* Statistiques basiques masquées - remplacées par le graphique
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-gray-900">{stats.totalVotes}</div>
@@ -892,9 +859,13 @@ function SessionPage() {
                       </div>
                     )}
                   </div>
+                  */}
+
+                  {/* Graphique de répartition des votes */}
+                  <VoteDistributionChart votes={votes} totalVotes={stats.totalVotes} />
                   
                   {stats.consensus && (
-                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="mt-6 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center text-green-800">
                         <CheckCircle className="h-5 w-5 mr-2" />
                         <span className="font-medium">Consensus atteint !</span>

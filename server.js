@@ -34,7 +34,10 @@ const io = socketIo(server, {
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  // 🕒 TOLÉRANCE ÉTENDUE: 50 minutes d'inactivité autorisées
+  pingInterval: 60000,        // 1 minute - fréquence des pings
+  pingTimeout: 3000000       // 50 minutes - timeout avant déconnexion forcée
 });
 
 // Connect to MongoDB

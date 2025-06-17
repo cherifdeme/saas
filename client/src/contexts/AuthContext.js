@@ -55,7 +55,6 @@ export function AuthProvider({ children }) {
       const response = await authService.me();
       dispatch({ type: 'SET_USER', payload: response.data.user });
     } catch (error) {
-      console.log('Auth check failed:', error.response?.status);
       dispatch({ type: 'SET_USER', payload: null });
     }
   };

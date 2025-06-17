@@ -171,6 +171,9 @@ const handleConnection = (io) => {
         });
         
         socket.currentSessionId = sessionId;
+        
+        // 🕒 TOLÉRANCE ÉTENDUE: Mettre à jour l'activité lors de la jointure
+        connectionManager.updateActivity(socket.username);
 
         // Add user to session tracking AFTER joining room
         addUserToSession(sessionId, socket.userId);
@@ -263,6 +266,9 @@ const handleConnection = (io) => {
             socket.userId = userId;
             socket.username = username;
             socket.sessionId = sessionId;
+            
+            // 🕒 TOLÉRANCE ÉTENDUE: Mettre à jour l'activité lors de la reconnexion
+            connectionManager.updateActivity(username);
             
             // Add user to session connections
             if (!sessionConnections.has(sessionId)) {
@@ -382,6 +388,9 @@ const handleConnection = (io) => {
 
     // Handle real-time voting updates
     socket.on('voteUpdate', (data) => {
+      // 🕒 TOLÉRANCE ÉTENDUE: Mettre à jour l'activité lors du vote
+      connectionManager.updateActivity(socket.username);
+      
       // Broadcast vote update to session participants (excluding sender)
       socket.to(`session-${data.sessionId}`).emit('voteSubmitted', {
         userId: socket.userId,
@@ -394,6 +403,9 @@ const handleConnection = (io) => {
     // Handle admin actions
     socket.on('adminAction', async (data) => {
       try {
+        // 🕒 TOLÉRANCE ÉTENDUE: Mettre à jour l'activité lors d'actions admin
+        connectionManager.updateActivity(socket.username);
+        
         const { sessionId, action, payload } = data;
         const session = await Session.findById(sessionId);
 
@@ -442,6 +454,8 @@ const handleConnection = (io) => {
     // Handle presence sync requests
     socket.on('requestPresenceSync', async (sessionId) => {
       try {
+        // 🕒 TOLÉRANCE ÉTENDUE: Mettre à jour l'activité lors de sync de présence
+        connectionManager.updateActivity(socket.username);
         
         // Get real-time connected users
         const connectedUsersInfo = await getConnectedUsersInSession(io, sessionId);
